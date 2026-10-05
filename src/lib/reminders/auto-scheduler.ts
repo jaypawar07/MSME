@@ -156,14 +156,24 @@ const MILESTONE_TAG_PATTERNS: Array<[MilestoneKey, RegExp]> = AUTO_REMINDER_MILE
 
 /**
  * Milestones already delivered, read from reminder history. Failed deliveries
- * don't count, so they're retried on the next run.
+ * don't count, so they're retried on the next run. In-progress (SENDING) records
+ * don't count either; the claim step in the runner stops a second send.
  */
 export function getSentMilestones(
-  existingReminders: Array<{ tone: string; subject?: string | null; message?: string; status?: string | null }>
+  existingReminders: Array<{
+    tone: string;
+    subject?: string | null;
+    message?: string;
+    status?: string | null;
+    milestone?: string | null;
+  }>
 ): MilestoneKey[] {
   const sent = new Set<MilestoneKey>();
   for (const r of existingReminders) {
-    if (r.status === "FAILED") continue;
+    if (r.status === "FAILED" || r.status === "SENDING") continue;
+    const tagged = AUTO_REMINDER_MILESTONES.find((m) => m.key === r.milestone);
+    if (tagged) sent.add(tagged.key);
+    // Older records carry the milestone only in their subject/message text
     const combined = `${r.tone} ${r.subject || ""} ${r.message || ""}`;
     for (const [key, pattern] of MILESTONE_TAG_PATTERNS) {
       if (pattern.test(combined)) sent.add(key);
@@ -172,7 +182,7 @@ export function getSentMilestones(
   return Array.from(sent);
 }
 
-type ReminderHistory = Array<{ tone: string; subject?: string | null; message?: string; status?: string | null }>;
+type ReminderHistory = Parameters<typeof getSentMilestones>[0];
 
 /** The milestone (at most one) this invoice is due for, honouring the Day 1/30/45/60 switches. */
 export function getDueMilestones(
@@ -271,6 +281,63 @@ export function evaluateInvoiceForAutoReminders(
   return planned;
 }
 
+/** A claim older than this belongs to a run that crashed mid-send (Vercel functions time out well before). */
+const STALE_CLAIM_MS = 60 * 60 * 1000;
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
+}
+
+/**
+ * Atomically reserves one automatic notice (invoice + milestone) for this run.
+ * The @@unique([invoiceId, milestone]) constraint lets only one run create the record;
+ * a FAILED or abandoned record can be taken over by exactly one later run.
+ * Returns the record id when this run may send, otherwise null.
+ */
+async function claimMilestone(
+  inv: { id: string; buyerName: string },
+  planned: PlannedMilestoneReminder,
+  asOfDate: Date
+): Promise<string | null> {
+  const content = {
+    buyerName: inv.buyerName,
+    buyerContact: planned.recipientContact,
+    channel: planned.channel,
+    tone: planned.templateTone,
+    subject: planned.subject,
+    message: `${planned.body}\n\n[Auto-Scheduled by Settlr on ${planned.milestone}]`,
+    status: "SENDING",
+    sentAt: asOfDate,
+  };
+
+  try {
+    const created = await prisma.reminder.create({
+      data: { invoiceId: inv.id, milestone: planned.milestone, ...content },
+    });
+    return created.id;
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+  }
+
+  const existing = await prisma.reminder.findUnique({
+    where: { invoiceId_milestone: { invoiceId: inv.id, milestone: planned.milestone } },
+  });
+  if (!existing) return null;
+
+  // Conditional update: if another run takes it over first, the condition no longer matches.
+  const takeover = await prisma.reminder.updateMany({
+    where: {
+      id: existing.id,
+      OR: [
+        { status: "FAILED" },
+        { status: "SENDING", sentAt: { lt: new Date(asOfDate.getTime() - STALE_CLAIM_MS) } },
+      ],
+    },
+    data: content,
+  });
+  return takeover.count === 1 ? existing.id : null;
+}
+
 /**
  * Runner that scans and executes automatic reminders for a given user or entire system
  */
@@ -284,7 +351,7 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
     include: {
       user: { include: { settings: true } },
       reminders: {
-        select: { tone: true, subject: true, message: true, status: true, sentAt: true },
+        select: { tone: true, subject: true, message: true, status: true, milestone: true, sentAt: true },
       },
     },
   });
@@ -316,7 +383,12 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
     const plannedList = evaluateInvoiceForAutoReminders(inv, inv.reminders, asOfDate, prefs, interestRateAnnual);
 
     for (const planned of plannedList) {
+      let claimId: string | null = null;
       try {
+        // Only the run that wins the claim sends; overlapping runs skip this notice.
+        claimId = await claimMilestone(inv, planned, asOfDate);
+        if (!claimId) continue;
+
         const calcs = calculateMSMEInterest(inv.invoiceDate, inv.amount, inv.paymentTermsDays, inv.status, asOfDate, interestRateAnnual);
         const sender = getNotificationSender(planned.channel);
 
@@ -336,18 +408,9 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
           metadata: { milestone: planned.milestone },
         });
 
-        await prisma.reminder.create({
-          data: {
-            invoiceId: inv.id,
-            buyerName: inv.buyerName,
-            buyerContact: planned.recipientContact,
-            channel: planned.channel,
-            tone: planned.templateTone,
-            subject: planned.subject,
-            message: `${planned.body}\n\n[Auto-Scheduled by Settlr on ${planned.milestone}]`,
-            status: sendResult.success ? "SENT" : "FAILED",
-            sentAt: sendResult.timestamp,
-          },
+        await prisma.reminder.update({
+          where: { id: claimId },
+          data: { status: sendResult.success ? "SENT" : "FAILED", sentAt: sendResult.timestamp },
         });
 
         executionLog.push({
@@ -359,6 +422,10 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
         });
       } catch (err) {
         console.error(`Error dispatching auto-reminder for invoice ${inv.invoiceNumber}:`, err);
+        // Release the claim so the next run retries this notice.
+        if (claimId) {
+          await prisma.reminder.update({ where: { id: claimId }, data: { status: "FAILED" } }).catch(() => {});
+        }
       }
     }
   }

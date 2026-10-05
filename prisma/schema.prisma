@@ -129,11 +129,15 @@ model Reminder {
   tone         String   // FRIENDLY, FORMAL, URGENT_MSMED, LEGAL_SAMADHAAN
   subject      String?
   message      String
-  status       String   @default("LOGGED")   // LOGGED, MOCK_SENT, SENT, FAILED
+  status       String   @default("LOGGED")   // LOGGED, MOCK_SENT, SENT, FAILED, SENDING (auto-reminder claimed, delivery in progress)
+  milestone    String?  // DAY_1, DAY_30, DAY_45, DAY_60 for automatic reminders; null for manual ones
   sentAt       DateTime @default(now())
   createdAt    DateTime @default(now())
 
   @@index([invoiceId])
+  // At most one automatic notice per invoice and milestone, even if scheduler runs overlap.
+  // Manual reminders (milestone = null) are not limited.
+  @@unique([invoiceId, milestone])
 }
 
 model FinancingLead {

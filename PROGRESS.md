@@ -12,7 +12,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | Area | State |
 | :--- | :--- |
 | Type check (`tsc --noEmit`) | ✅ clean |
-| Test suite (`npm test`) | ✅ 73 / 73 passing (was ❌ crashing before 2026-10-05) |
+| Test suite (`npm test`) | ✅ 78 / 78 passing (was ❌ crashing before 2026-10-05) |
 | Tests that exercise real `src/` code | ✅ 8 of 8 files; multi-tenant test calls real API routes on a throwaway `prisma/test.db` |
 | Production build (`next build`) | ✅ clean, no warnings |
 | Version control | ✅ git, `main` tracks github.com/jaypawar07/MSME |
@@ -36,7 +36,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | B14 | **Watch (legal)** | RBI policy decision due **7 Oct 2026**. Bank Rate is 5.50% today (so 16.5% is correct). If it changes, suppliers must update Settings; the explanatory copy (banner, onboarding, landing, page meta) still says "currently 16.5%". Consider an admin-level default instead of per-supplier entry. | `MSMEDSection16Banner.tsx`, `OnboardingGuideModal.tsx`, landing |
 | B15 | Medium (legal, needs CA/lawyer) | When the RBI rate changes mid-delay, the app applies today's rate to the whole period. Should earlier months use the rate in force then? `RateAuditLog` already stores history if needed. | `msme-calculator.ts` |
 | B16 | Low | Shared buyer-risk view (admin page + dashboard modal) computes all suppliers at the statutory 16.5% default; correct for comparison, but differs from a supplier's own custom rate. | `buyer-risk-aggregator.ts` |
-| B17 | Medium | Vercel may occasionally deliver a cron run twice; two overlapping runs could send a duplicate notice (both read history before either writes). Add a per-invoice/milestone unique key or a run lock before real sending goes live. | `auto-scheduler.ts`, `schema.prisma` |
+| ~~B17~~ | ✅ fixed 2026-10-05 | Overlapping scheduler runs sent duplicate notices (reproduced: 3 runs → 3 copies). Now one automatic notice per invoice + milestone, enforced by the database. | `auto-scheduler.ts`, `schema.prisma` |
 | B18 | Low | The cron runs once a day at 09:00 IST. A supplier whose quiet hours cover 09:00 will never get automatic reminders. Validate quiet hours in Settings or run hourly (needs Vercel Pro). | `settings/page.tsx`, `vercel.json` |
 | B19 | Low | Scheduler loads every open invoice and its reminders in one query. Fine for a pilot; paginate before thousands of suppliers. | `runAutoReminderScheduler` |
 | B11 | Low (docs) | README's interest formula (whole months compounded + simple interest on leftover days) differs from the code (fractional-month compounding). Confirm which is legally correct, then align. | `README.md`, `src/lib/msme-calculator.ts` |
@@ -103,6 +103,13 @@ Legend: ⬜ not started · 🟡 partial · ✅ done
 - **Tests:** 67 → 73 (`cron-reminders.test.mjs`): no secret, wrong/missing token, quiet hours, sends for all suppliers, no contact leak, route wiring, schedule in `vercel.json`. Handler takes the time as a parameter, so tests are deterministic. Mutation-checked (auth removed; log leaked).
 - **Verified:** `npm run check` 73/73, `next build` compiles, route is dynamic.
 
+### 2026-10-05 (session 6): no duplicate notices
+- **Reproduced first:** three overlapping scheduler runs sent the same Day 1 notice 3 times.
+- **Fixed:** `Reminder.milestone` + `@@unique([invoiceId, milestone])`. The runner claims a notice (insert, status `SENDING`) before sending; only the run that wins the claim sends. FAILED notices are retried by taking over the same record; claims older than 1 hour (crashed run) can be taken over; fresh in-flight claims are left alone. Manual reminders (`milestone = null`) are not limited.
+- **Schema change:** `npx prisma generate && npx prisma db push` on dev (backed up first; row counts unchanged). **Production (Postgres) needs `npx prisma db push` on the next deploy.**
+- **Tests:** 73 → 78 (`reminder-concurrency.test.mjs`). Mutation-checked: no uniqueness, no FAILED retry, immediate takeover all go red.
+- **Also:** user couldn't open the app. The dev server had been stopped after my checks and the pane showed a stale, oversized view. Login page verified at 375 / 800 / 1600 px, no overflow. App restarted.
+
 ---
 
 ## 🧠 Lessons learned (mistakes → rules)
@@ -129,3 +136,5 @@ Each time a mistake is found, add a line here so it isn't repeated.
 18. **Docs can describe code that doesn't exist.** Grep for every endpoint/env var a doc promises. *(2026-10-05)*
 19. **Example config must be safe to copy as-is.** Placeholder secrets that look real switch on real integrations. *(2026-10-05)*
 20. **Never branch a test on the wall clock.** Pass the time in, so every run checks the same thing. *(2026-10-05)*
+21. **Prevent duplicates in the database, not just in code.** A "check history, then send" step can't stop two overlapping runs; a unique constraint plus claim-before-send can. *(2026-10-05)*
+22. **When the user is using the running app, say before stopping it**, and restart it when done. *(2026-10-05)*
