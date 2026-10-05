@@ -5,9 +5,9 @@
  */
 
 import { format } from "date-fns";
-import { calculateMSMEInterest, InvoiceCalculations } from "@/lib/msme-calculator";
-import { REMINDER_TEMPLATES, ReminderTemplate } from "@/lib/reminder-templates";
-import { getNotificationSender, NotificationChannel } from "@/lib/notifications/notification-sender";
+import { calculateMSMEInterest, type InvoiceCalculations } from "@/lib/msme-calculator";
+import { REMINDER_TEMPLATES, type ReminderTemplate } from "@/lib/reminder-templates";
+import { getNotificationSender, type NotificationChannel } from "@/lib/notifications/notification-sender";
 import { prisma } from "@/lib/prisma";
 
 export type MilestoneKey = "DAY_1" | "DAY_30" | "DAY_45" | "DAY_60";

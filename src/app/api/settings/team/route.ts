@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const memberRole = role === "STAFF" ? "STAFF" : "ACCOUNTANT";
 
-    const member = await (prisma as any).teamMember.create({
+    const member = await prisma.teamMember.create({
       data: {
         ownerUserId: userId,
         name: name.trim(),
@@ -81,7 +81,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Verify ownership before deleting
-    await (prisma as any).teamMember.deleteMany({
+    await prisma.teamMember.deleteMany({
       where: {
         id: memberId,
         ownerUserId: userId,

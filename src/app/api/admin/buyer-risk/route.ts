@@ -11,8 +11,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // In a production setup with roles, check session.user.role === "ADMIN"
-    // For this internal admin view, authenticated users can view the aggregated risk dataset.
+    // Pooled buyer risk scores are shared across suppliers, but raw invoice
+    // numbers belonging to other tenants are only visible to admins.
+    const userId = (session.user as any).id as string;
+    const isAdmin = (session.user as any).role === "ADMIN";
     const url = new URL(req.url);
     const search = url.searchParams.get("q")?.toLowerCase();
     const sortBy = url.searchParams.get("sortBy") || "overdue"; // overdue, risk, lateRate, invoices
@@ -35,6 +37,15 @@ export async function GET(req: Request) {
     const dataset = aggregateBuyerPaymentRisk(allInvoices);
 
     let buyers = dataset.buyers;
+    if (!isAdmin) {
+      const ownInvoiceNumbers = new Set(
+        allInvoices.filter((inv) => inv.userId === userId).map((inv) => inv.invoiceNumber)
+      );
+      buyers = buyers.map((b) => ({
+        ...b,
+        sampleInvoiceNumbers: b.sampleInvoiceNumbers.filter((n) => ownInvoiceNumbers.has(n)),
+      }));
+    }
 
     // Apply search filter if query provided
     if (search) {

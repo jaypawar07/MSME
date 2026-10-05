@@ -13,12 +13,12 @@ export async function GET(req: NextRequest) {
     const userId = (session.user as any).id;
 
     // Fetch or create default CompanySettings
-    let settings = await (prisma as any).companySettings.findUnique({
+    let settings = await prisma.companySettings.findUnique({
       where: { userId },
     });
 
     if (!settings) {
-      settings = await (prisma as any).companySettings.create({
+      settings = await prisma.companySettings.create({
         data: {
           userId,
           rbiBaseRate: 5.5,
@@ -31,14 +31,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch Rate Audit Logs
-    const auditLogs = await (prisma as any).rateAuditLog.findMany({
+    const auditLogs = await prisma.rateAuditLog.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
       take: 20,
     });
 
     // Fetch Team Members
-    const teamMembers = await (prisma as any).teamMember.findMany({
+    const teamMembers = await prisma.teamMember.findMany({
       where: { ownerUserId: userId },
       orderBy: { invitedAt: "desc" },
     });
@@ -101,7 +101,7 @@ export async function PATCH(req: NextRequest) {
     } = body;
 
     // Get current settings to detect interest rate change
-    const currentSettings = await (prisma as any).companySettings.findUnique({
+    const currentSettings = await prisma.companySettings.findUnique({
       where: { userId },
     });
 
@@ -110,7 +110,7 @@ export async function PATCH(req: NextRequest) {
 
     // If rate changed, log audit record
     if (Math.abs(oldRate - newRate) > 0.001) {
-      await (prisma as any).rateAuditLog.create({
+      await prisma.rateAuditLog.create({
         data: {
           userId,
           oldRate,
@@ -122,7 +122,7 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    const updated = await (prisma as any).companySettings.upsert({
+    const updated = await prisma.companySettings.upsert({
       where: { userId },
       update: {
         ...(typeof enableWhatsApp === "boolean" && { enableWhatsApp }),

@@ -5,7 +5,7 @@
  */
 
 import { format } from "date-fns";
-import { calculateMSMEInterest, InvoiceCalculations, MSME_STATUTORY_ANNUAL_RATE } from "@/lib/msme-calculator";
+import { calculateMSMEInterest, type InvoiceCalculations, MSME_STATUTORY_ANNUAL_RATE } from "@/lib/msme-calculator";
 
 export interface DisputePartyDetails {
   name: string;

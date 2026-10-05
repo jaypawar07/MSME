@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
     const userId = (session.user as any).id;
 
     // Fetch user's company settings for custom rate if set
-    const settings = await (prisma as any).companySettings.findUnique({
+    const settings = await prisma.companySettings.findUnique({
       where: { userId },
     });
     const annualRate = settings?.effectiveAnnualRate || 16.5;
 
-    const invoices = await (prisma as any).invoice.findMany({
+    const invoices = await prisma.invoice.findMany({
       where: { userId },
       include: {
         reminders: true,

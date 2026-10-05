@@ -23,7 +23,7 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json();
     const { confirmCompanyName } = body;
 
-    const user = await (prisma as any).user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
     });
 
@@ -44,7 +44,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Delete user (Cascades to Invoices, Reminders, Leads, Settings via Prisma onDelete: Cascade)
-    await (prisma as any).user.delete({
+    await prisma.user.delete({
       where: { id: userId },
     });
 

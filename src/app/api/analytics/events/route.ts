@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const userId = (session?.user as any)?.id || (properties?.userId as string) || null;
 
-    const loggedEvent = await (prisma as any).analyticsEvent.create({
+    const loggedEvent = await prisma.analyticsEvent.create({
       data: {
         userId,
         event,
@@ -48,12 +48,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Return aggregate counts for the logged in user or admin summary
-    const events = await (prisma as any).analyticsEvent.findMany({
+    const events = await prisma.analyticsEvent.findMany({
       take: 100,
       orderBy: { timestamp: "desc" },
     });
 
-    const counts = await (prisma as any).analyticsEvent.groupBy({
+    const counts = await prisma.analyticsEvent.groupBy({
       by: ["event"],
       _count: { _all: true },
     });

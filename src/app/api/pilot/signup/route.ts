@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const signup = await (prisma as any).pilotSignup.create({
+    const signup = await prisma.pilotSignup.create({
       data: {
         businessName: businessName.trim(),
         contactName: contactName.trim(),
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Also log an analytics event
-    await (prisma as any).analyticsEvent.create({
+    await prisma.analyticsEvent.create({
       data: {
         event: "pilot_lead_signup",
         properties: JSON.stringify({

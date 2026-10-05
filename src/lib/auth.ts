@@ -1,4 +1,4 @@
-import { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
@@ -24,14 +24,16 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email.toLowerCase().trim() },
         });
 
+        // Same message for unknown email and wrong password, so the login form
+        // can't be used to discover which emails are registered.
         if (!user || !user.passwordHash) {
-          throw new Error("No account found with this email");
+          throw new Error("Invalid email or password");
         }
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.passwordHash);
 
         if (!isPasswordValid) {
-          throw new Error("Invalid password credentials");
+          throw new Error("Invalid email or password");
         }
 
         return {
@@ -40,6 +42,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           businessName: user.businessName || "",
           udyamNumber: user.udyamNumber || "",
+          role: user.role,
         };
       },
     }),
@@ -50,6 +53,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.businessName = (user as any).businessName;
         token.udyamNumber = (user as any).udyamNumber;
+        token.role = (user as any).role;
       }
       return token;
     },
@@ -58,6 +62,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id as string;
         (session.user as any).businessName = token.businessName as string;
         (session.user as any).udyamNumber = token.udyamNumber as string;
+        (session.user as any).role = token.role as string | undefined;
       }
       return session;
     },
@@ -66,5 +71,9 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/login",
   },
-  secret: process.env.NEXTAUTH_SECRET || "msme-udyam-secure-jwt-secret-key-32chars-min-2025",
+  // No hard-coded fallback in production: a known secret would let anyone forge
+  // session tokens. NextAuth refuses to start in production without one.
+  secret:
+    process.env.NEXTAUTH_SECRET ||
+    (process.env.NODE_ENV === "production" ? undefined : "dev-only-insecure-secret-do-not-use-in-prod"),
 };

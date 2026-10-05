@@ -11,7 +11,9 @@
     "prisma:push": "prisma db push",
     "prisma:seed": "node prisma/seed.js",
     "postinstall": "prisma generate",
-    "test": "node --test tests/run-all-tests.mjs"
+    "test": "node --import ./tests/alias-loader.mjs --test tests/run-all-tests.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@prisma/client": "^5.21.1",
