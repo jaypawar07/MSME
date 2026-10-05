@@ -29,7 +29,9 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | ~~B3~~ | ✅ fixed 2026-10-05 | Login revealed which emails exist, now one generic message. | `src/lib/auth.ts` |
 | ~~B7~~ | ✅ fixed 2026-10-05 | `prisma/dev.db` and an uploaded invoice image were committed to the public repo. Untracked and gitignored (still in older history; demo data only). | repo |
 | B8 | Low | `next dev` logs "Failed to patch lockfile … reading 'os'". Harmless; fix by reinstalling `next` / refreshing the lockfile. | `package-lock.json` |
-| B9 | Low | No `ADMIN` user is seeded, so `/admin/buyer-risk` only shows the non-admin view locally. | `prisma/seed.js` |
+| ~~B9~~ | ✅ fixed 2026-10-05 | No admin account to try the admin page. Seeded `admin@msme.in` (dev only), "Admin Demo Login" button (dev builds only), and a Tools-menu link for admins. | `seed.js`, `login/page.tsx`, `Navbar.tsx` |
+| B21 | **Medium (security, before going live)** | The supplier **1-Click Demo Login** (public password `password123`) is still in production builds. Harmless only if the demo account isn't seeded in production. Decide: hide it behind a `NEXT_PUBLIC_DEMO_MODE` flag, or keep a public demo on a separate database. | `login/page.tsx`, `seed.js` |
+| B22 | Low (data) | Seed script **deletes all users, invoices and reminders** before seeding. Never run it against a real database; consider a guard. | `prisma/seed.js` |
 | ~~B4~~ | ✅ fixed 2026-10-05 | 4 test files re-implemented logic instead of testing it. All now import real code. | `tests/` |
 | B10a | ✅ fixed 2026-10-05 | Auto-reminders ignored Settings. Now follow the Day 1/30/45/60 switches, quiet hours (India time) and the Email/WhatsApp toggles. | `auto-scheduler.ts` |
 | ~~B10b~~ | ✅ fixed 2026-10-05 | Custom interest rate was ignored. Now drives the calculation **and** every quoted rate: dashboard, reminder notices (EN/HI), notification email, dispute package, data export. | see change log |
@@ -118,6 +120,12 @@ Legend: ⬜ not started · 🟡 partial · ✅ done
 - **Tests:** 78 → 85. **Verified in browser:** quiet hours 21:00–09:00 → save refused with the explanation shown, nothing stored.
 - **My mistake:** ran `next build` while the dev server was running. It overwrote `.next` and broke the running app (500s, lost login state). Restarted the dev server after clearing `.next`.
 
+### 2026-10-05 (session 8): admin demo account; Bank-Rate wording
+- **Feature:** `admin@msme.in` (ADMIN) in the seed, added to the existing dev DB with a one-off insert-only script (users 1 → 2; invoices/reminders unchanged; seed not run because it wipes data). "Admin Demo Login" on the login page, "Admin: Buyer Risk" in the Tools menu for admins. Verified in the browser: admin login → Tools → admin page shows the demo supplier's invoice number; signed back in as the demo user.
+- **Security (caught in self-review):** the admin demo password is public, so the admin button only renders when `NODE_ENV !== "production"` (confirmed: 0 occurrences in the production build) and the seed skips the admin in production. Logged B21 for the supplier demo button.
+- **Fixed (legal wording):** onboarding said interest is 3x the "RBI **repo** rate". It's the **Bank Rate** (= MSF rate). Settings now tells suppliers to use the Bank Rate, not the lower repo rate (EN + HI). Schema comment corrected.
+- Stopped the dev server before `next build` this time (lesson 24), then restarted it cleanly.
+
 ---
 
 ## 🧠 Lessons learned (mistakes → rules)
@@ -149,3 +157,5 @@ Each time a mistake is found, add a line here so it isn't repeated.
 23. **Exposing real data can surface old bad data.** When a field starts flowing somewhere new (role → session), check what values actually exist in databases, not just what the schema says now. *(2026-10-05)*
 24. **Never run `next build` while `next dev` is running.** They share `.next`. Stop the dev server first, or build in CI. *(2026-10-05)*
 25. **Verify UI changes by actually using them.** Unit tests passed while the Save button was disabled for the demo user. *(2026-10-05)*
+26. **Review your own feature for abuse before shipping.** A convenient demo login for an *admin* account would have exposed every supplier's data on a deployed site. *(2026-10-05)*
+27. **Read a seed/reset script before running it.** This one deletes all data first. *(2026-10-05)*

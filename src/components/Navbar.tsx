@@ -179,6 +179,22 @@ export function Navbar({
 
                     <DropdownMenuSeparator />
 
+                    {(session.user as any).role === "ADMIN" && (
+                      <Link href="/admin/buyer-risk" className="w-full">
+                        <DropdownMenuItem>
+                          <div className="h-7 w-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 shrink-0">
+                            <ShieldCheck className="h-4 w-4" />
+                          </div>
+                          <div className="flex flex-col text-left">
+                            <span className="font-semibold text-xs text-slate-900">
+                              {isHindi ? "एडमिन: खरीदार जोखिम" : "Admin: Buyer Risk"}
+                            </span>
+                            <span className="text-[10px] text-slate-500">All suppliers, all invoices</span>
+                          </div>
+                        </DropdownMenuItem>
+                      </Link>
+                    )}
+
                     <Link href="/settings" className="w-full">
                       <DropdownMenuItem>
                         <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">

@@ -145,7 +145,7 @@ export default function OnboardingGuideModal({
                   <p className="text-slate-600 text-xs mt-1.5">
                     {isHindi
                       ? "45वें दिन के बाद, खरीदार पर RBI बैंक दर का 3 गुना (वर्तमान में ~16.5%) चक्रवृद्धि मासिक ब्याज स्वतः जुड़ता जाता है।"
-                      : "From Day 46 onwards, Section 16 charges compound penal interest at 3x the RBI repo rate with monthly rests."}
+                      : "From Day 46 onwards, Section 16 charges compound penal interest at 3x the RBI Bank Rate with monthly rests."}
                   </p>
                 </div>
 

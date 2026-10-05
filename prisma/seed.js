@@ -22,10 +22,29 @@ async function main() {
       businessName: "Apex Precision Engineering Works",
       udyamNumber: "UDYAM-MH-12-0049281",
       phone: "+91 98201 54321",
+      role: "OWNER",
     },
   });
 
   console.log(`Created MSME Supplier: ${user.name} (${user.email})`);
+
+  // 2. Platform admin (sees the cross-supplier buyer-risk view at /admin/buyer-risk).
+  // Its password is public, so it is never created in production.
+  if (process.env.NODE_ENV === "production") {
+    console.log("Skipping demo admin account (NODE_ENV=production).");
+  } else {
+  const admin = await prisma.user.create({
+    data: {
+      email: "admin@msme.in",
+      passwordHash,
+      name: "Settlr Admin",
+      businessName: "Settlr Platform Admin",
+      role: "ADMIN",
+    },
+  });
+
+  console.log(`Created Platform Admin: ${admin.name} (${admin.email})`);
+  }
 
   const now = new Date();
   

@@ -48,15 +48,16 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickDemoLogin = async () => {
-    setEmail("demo@msme.in");
+  // Seeded demo accounts (prisma/seed.js)
+  const handleQuickDemoLogin = async (demoEmail: string = "demo@msme.in") => {
+    setEmail(demoEmail);
     setPassword("password123");
     setLoading(true);
     setError(null);
 
     const res = await signIn("credentials", {
       redirect: false,
-      email: "demo@msme.in",
+      email: demoEmail,
       password: "password123",
     });
 
@@ -104,12 +105,24 @@ export default function LoginPage() {
             <button
               type="button"
               disabled={loading}
-              onClick={handleQuickDemoLogin}
+              onClick={() => handleQuickDemoLogin()}
               className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm flex items-center justify-center gap-1.5 transition-all"
             >
               <span>1-Click Demo Login (Rajesh Sharma)</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
+            {/* The admin demo account has a public password: local development only, never in production builds */}
+            {process.env.NODE_ENV !== "production" && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => handleQuickDemoLogin("admin@msme.in")}
+                className="w-full mt-2 py-1.5 px-3 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-all"
+              >
+                <span>Admin Demo Login (cross-supplier buyer risk)</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
           </div>
 
           <div className="relative flex items-center justify-center">

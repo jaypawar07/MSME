@@ -520,8 +520,8 @@ export default function SettingsPage() {
                   </CardTitle>
                   <CardDescription>
                     {isHindi
-                      ? "जब भी भारतीय रिजर्व बैंक (RBI) बैंक दर में संशोधन करे, आप यहां दर को अपडेट कर सकते हैं बिना किसी कोड डिप्लॉयमेंट के।"
-                      : "Section 16 mandates compound interest with monthly rests at 3x the RBI Bank Rate. Update parameters dynamically when RBI revises notifications."}
+                      ? "जब भी भारतीय रिजर्व बैंक (RBI) बैंक दर में संशोधन करे, आप यहां दर को अपडेट कर सकते हैं बिना किसी कोड डिप्लॉयमेंट के। बैंक दर (MSF दर के बराबर) का उपयोग करें, रेपो दर का नहीं।"
+                      : "Section 16 mandates compound interest with monthly rests at 3x the RBI Bank Rate. Use the Bank Rate (it equals the MSF rate), not the lower repo rate. Update it here whenever the RBI revises it."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

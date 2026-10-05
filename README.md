@@ -48,6 +48,8 @@ The database comes pre-seeded with a verified MSME supplier account:
 
 > 💡 *On the login screen, click the **"1-Click Demo Login (Rajesh Sharma)"** button for instant access.*
 
+**Platform admin (local development only):** `admin@msme.in` / `password123`, role `ADMIN`. Use **"Admin Demo Login"** on the login screen, then **Tools → Admin: Buyer Risk** to see the cross-supplier buyer-risk view with every supplier's invoice numbers. The seed skips this account and the button is hidden when `NODE_ENV=production`, because its password is public.
+
 ---
 
 ## 📊 5 Seeded Sample Invoices & Lifecycle States

@@ -41,7 +41,7 @@ model CompanySettings {
   quietHoursEnd         String   @default("08:00") // 8:00 AM
 
   // 2. Statutory Interest Rates
-  rbiBaseRate           Float    @default(5.5) // RBI Repo / Bank Base Rate %
+  rbiBaseRate           Float    @default(5.5) // RBI Bank Rate % (equals the MSF rate; NOT the repo rate)
   statutoryMultiplier   Float    @default(3.0) // 3x multiplier
   effectiveAnnualRate   Float    @default(16.5) // 16.5% compound rate
   rateEffectiveDate     DateTime @default(now())
