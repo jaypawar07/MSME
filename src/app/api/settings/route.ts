@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { can, computeEffectiveRate, isValidRate, isValidTimeHHMM, RATE_LIMITS } from "@/lib/settings/policy";
+import { can, computeEffectiveRate, isValidRate, isValidTimeHHMM, normalizeRole, quietHoursWarning, RATE_LIMITS } from "@/lib/settings/policy";
 
 export async function GET(req: NextRequest) {
   try {
@@ -46,9 +46,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       settings,
+      // Settings saved before this rule existed may block every automatic reminder
+      quietHoursWarning: quietHoursWarning(settings.quietHoursStart, settings.quietHoursEnd),
       auditLogs,
       teamMembers,
-      currentUserRole: (session.user as any).role || "OWNER",
+      currentUserRole: normalizeRole((session.user as any).role),
       companyName: (session.user as any).businessName || session.user.name,
     });
   } catch (error: any) {
@@ -107,6 +109,14 @@ export async function PATCH(req: NextRequest) {
       if (value !== undefined && !isValidTimeHHMM(value)) {
         return NextResponse.json({ error: `${field} must be a time in HH:MM format` }, { status: 400 });
       }
+    }
+    // Check the window that will actually be saved, including an unchanged end
+    const quietWarning = quietHoursWarning(
+      quietHoursStart ?? currentSettings?.quietHoursStart ?? "21:00",
+      quietHoursEnd ?? currentSettings?.quietHoursEnd ?? "08:00"
+    );
+    if (quietWarning) {
+      return NextResponse.json({ error: quietWarning }, { status: 400 });
     }
     if (rbiBaseRate !== undefined && !isValidRate(rbiBaseRate, RATE_LIMITS.rbiBaseRate)) {
       return NextResponse.json({ error: "RBI Bank Rate must be between 0.01% and 25%" }, { status: 400 });

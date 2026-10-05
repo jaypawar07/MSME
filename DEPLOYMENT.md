@@ -100,7 +100,7 @@ In `vercel.json`:
   ]
 }
 ```
-*(Runs daily at 03:30 UTC = 09:00 AM IST).*
+*(Runs daily at 03:30 UTC = 09:00 AM IST on Vercel Pro. On the Hobby plan Vercel only guarantees the hour, so it runs between 08:30 and 09:29 IST. Settings therefore rejects quiet hours that overlap 08:30–09:30 IST.)*
 
 To secure this endpoint, Vercel automatically passes `Authorization: Bearer <CRON_SECRET>` in the header. If `CRON_SECRET` is not set, the endpoint returns `503` and sends nothing; a wrong or missing token returns `401`.
 

@@ -62,3 +62,29 @@ export function istTimeHHMM(date: Date = new Date()): string {
   const ist = new Date(date.getTime() + (5 * 60 + 30) * 60 * 1000);
   return `${String(ist.getUTCHours()).padStart(2, "0")}:${String(ist.getUTCMinutes()).padStart(2, "0")}`;
 }
+
+/**
+ * When the daily automatic-reminder job can run, in IST. vercel.json schedules it at
+ * 03:30 UTC (09:00 IST); on Vercel's Hobby plan it may fire anytime in that UTC hour.
+ * Kept in sync with vercel.json by tests/cron-reminders.test.mjs.
+ */
+export const AUTO_SEND_WINDOW_IST = { start: "08:30", end: "09:30" };
+
+/** True if the quiet window overlaps the send window, so automatic reminders could be held back every day. */
+export function quietHoursBlockAutoSend(start: string, end: string): boolean {
+  const from = toMinutes(AUTO_SEND_WINDOW_IST.start);
+  const to = toMinutes(AUTO_SEND_WINDOW_IST.end);
+  for (let m = from; m < to; m++) {
+    const hhmm = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    if (isQuietHours(hhmm, start, end)) return true;
+  }
+  return false;
+}
+
+export function quietHoursWarning(start: string, end: string): string | null {
+  return quietHoursBlockAutoSend(start, end)
+    ? `Automatic reminders are sent once a day between ${AUTO_SEND_WINDOW_IST.start} and ${AUTO_SEND_WINDOW_IST.end} IST. ` +
+        `Quiet hours ${start}–${end} overlap that window, so automatic reminders may never be sent. ` +
+        `End quiet hours by ${AUTO_SEND_WINDOW_IST.start} or start them after ${AUTO_SEND_WINDOW_IST.end}.`
+    : null;
+}

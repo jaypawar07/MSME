@@ -9,6 +9,8 @@ import {
   isValidTimeHHMM,
   isQuietHours,
   istTimeHHMM,
+  AUTO_SEND_WINDOW_IST,
+  quietHoursBlockAutoSend,
 } from "../src/lib/settings/policy.ts";
 
 test("Company Settings: Statutory Interest Calculation Formula", () => {
@@ -62,4 +64,16 @@ test("Company Settings: Time format validation", () => {
 test("Company Settings: Quiet hours are evaluated in India time regardless of server timezone", () => {
   assert.equal(istTimeHHMM(new Date("2024-06-01T16:00:00Z")), "21:30");
   assert.equal(istTimeHHMM(new Date("2024-06-01T20:00:00Z")), "01:30");
+});
+
+test("Company Settings: Quiet hours may not cover the daily automatic-send window", () => {
+  assert.deepEqual(AUTO_SEND_WINDOW_IST, { start: "08:30", end: "09:30" });
+  assert.equal(quietHoursBlockAutoSend("21:00", "08:00"), false, "Default 9pm–8am is fine");
+  assert.equal(quietHoursBlockAutoSend("21:00", "08:30"), false, "Ending exactly at 08:30 is fine");
+  assert.equal(quietHoursBlockAutoSend("21:00", "08:31"), true, "One minute into the window is not");
+  assert.equal(quietHoursBlockAutoSend("21:00", "09:00"), true);
+  assert.equal(quietHoursBlockAutoSend("09:29", "10:00"), true, "Starting inside the window");
+  assert.equal(quietHoursBlockAutoSend("09:30", "18:00"), false, "Starting when the window ends is fine");
+  assert.equal(quietHoursBlockAutoSend("06:00", "12:00"), true, "Window fully inside quiet hours");
+  assert.equal(quietHoursBlockAutoSend("09:00", "09:00"), false, "Equal start/end disables quiet hours");
 });

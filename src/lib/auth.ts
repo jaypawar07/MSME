@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { normalizeRole } from "@/lib/settings/policy";
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -42,7 +43,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           businessName: user.businessName || "",
           udyamNumber: user.udyamNumber || "",
-          role: user.role,
+          role: normalizeRole(user.role),
         };
       },
     }),
@@ -53,7 +54,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.businessName = (user as any).businessName;
         token.udyamNumber = (user as any).udyamNumber;
-        token.role = (user as any).role;
+        token.role = normalizeRole((user as any).role);
       }
       return token;
     },
@@ -62,7 +63,8 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id as string;
         (session.user as any).businessName = token.businessName as string;
         (session.user as any).udyamNumber = token.udyamNumber as string;
-        (session.user as any).role = token.role as string | undefined;
+        // Also corrects sessions issued before roles were normalized (e.g. a legacy "USER" role)
+        (session.user as any).role = normalizeRole(token.role);
       }
       return session;
     },

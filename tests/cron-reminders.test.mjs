@@ -87,3 +87,16 @@ describe("Cron - daily automatic reminders", () => {
     assert.deepEqual(config.crons, [{ path: "/api/cron/reminders", schedule: "30 3 * * *" }]);
   });
 });
+
+test("Cron schedule and the Settings send window agree (Hobby plan fires anytime within the UTC hour)", async () => {
+  const { AUTO_SEND_WINDOW_IST, istTimeHHMM } = await import("../src/lib/settings/policy.ts");
+  const config = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"));
+  const [minute, hour] = config.crons[0].schedule.split(" ").map(Number);
+  // Earliest possible run: start of the UTC hour; latest: end of that hour (Hobby) — Pro runs at the exact minute, inside both.
+  const earliest = istTimeHHMM(new Date(Date.UTC(2024, 0, 1, hour, 0)));
+  const latestExclusive = istTimeHHMM(new Date(Date.UTC(2024, 0, 1, hour + 1, 0)));
+  const exact = istTimeHHMM(new Date(Date.UTC(2024, 0, 1, hour, minute)));
+  assert.equal(AUTO_SEND_WINDOW_IST.start, earliest);
+  assert.equal(AUTO_SEND_WINDOW_IST.end, latestExclusive);
+  assert.ok(exact >= earliest && exact < latestExclusive);
+});

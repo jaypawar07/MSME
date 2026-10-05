@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
+import { AUTO_SEND_WINDOW_IST } from "@/lib/settings/policy";
 import { 
   Bell, 
   Scale, 
@@ -47,6 +48,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [quietHoursWarning, setQuietHoursWarning] = useState<string | null>(null);
 
   // Form States
   const [settings, setSettings] = useState<any>({
@@ -111,6 +113,7 @@ export default function SettingsPage() {
               : new Date().toISOString().split("T")[0],
           });
         }
+        setQuietHoursWarning(data.quietHoursWarning || null);
         setAuditLogs(data.auditLogs || []);
         setTeamMembers(data.teamMembers || []);
         setCurrentUserRole(data.currentUserRole || "OWNER");
@@ -492,6 +495,17 @@ export default function SettingsPage() {
                       />
                     </div>
                   </div>
+                  <p className="text-[11px] text-slate-500 mt-3 max-w-md">
+                    {isHindi
+                      ? `स्वचालित रिमाइंडर प्रतिदिन ${AUTO_SEND_WINDOW_IST.start}–${AUTO_SEND_WINDOW_IST.end} IST के बीच भेजे जाते हैं। शांत समय इस अवधि से नहीं टकराना चाहिए।`
+                      : `Automatic reminders go out once a day between ${AUTO_SEND_WINDOW_IST.start} and ${AUTO_SEND_WINDOW_IST.end} IST. Quiet hours must not overlap this window.`}
+                  </p>
+                  {quietHoursWarning && (
+                    <div className="mt-3 max-w-md flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                      <span>{quietHoursWarning}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
