@@ -1,0 +1,185 @@
+// Prisma schema for MSME Delayed Payment & Invoice Tracker
+// Supports SQLite for instant local zero-config testing & PostgreSQL for Neon/Vercel deployment
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String
+  name         String
+  businessName String?
+  udyamNumber  String?         // e.g. UDYAM-XX-00-0000000
+  phone        String?
+  role         String          @default("OWNER") // OWNER, ACCOUNTANT, STAFF, ADMIN
+  invoices     Invoice[]
+  settings     CompanySettings?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model CompanySettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 1. Notification Preferences
+  enableWhatsApp        Boolean  @default(true)
+  enableEmail           Boolean  @default(true)
+  sendDay1              Boolean  @default(true)
+  sendDay30             Boolean  @default(true)
+  sendDay45             Boolean  @default(true)
+  sendDay60             Boolean  @default(true)
+  quietHoursStart       String   @default("21:00") // 9:00 PM
+  quietHoursEnd         String   @default("08:00") // 8:00 AM
+
+  // 2. Statutory Interest Rates
+  rbiBaseRate           Float    @default(5.5) // RBI Repo / Bank Base Rate %
+  statutoryMultiplier   Float    @default(3.0) // 3x multiplier
+  effectiveAnnualRate   Float    @default(16.5) // 16.5% compound rate
+  rateEffectiveDate     DateTime @default(now())
+  rateNotes             String?
+
+  // 3. Integration Status & Credentials
+  tallyStatus           String   @default("CSV_ACTIVE") // CSV_ACTIVE, CONNECTED
+  whatsappStatus        String   @default("PENDING_CREDENTIALS") // PENDING_CREDENTIALS, VERIFIED
+  whatsappPhoneNumberId String?
+  whatsappAccountId     String?
+  whatsappApiKey        String?
+  gstGspStatus          String   @default("SANDBOX_READY") // SANDBOX_READY, PRODUCTION_CONNECTED
+  gstGspUsername        String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model RateAuditLog {
+  id            String   @id @default(cuid())
+  userId        String
+  oldRate       Float
+  newRate       Float
+  effectiveDate DateTime
+  reason        String?
+  changedBy     String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model TeamMember {
+  id          String    @id @default(cuid())
+  ownerUserId String
+  name        String
+  email       String
+  role        String    @default("ACCOUNTANT") // OWNER, ACCOUNTANT, STAFF
+  status      String    @default("ACTIVE")     // INVITED, ACTIVE, REVOKED
+  invitedAt   DateTime  @default(now())
+  joinedAt    DateTime?
+
+  @@index([ownerUserId])
+  @@index([email])
+}
+
+model Invoice {
+  id                  String          @id @default(cuid())
+  userId              String
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  buyerName           String
+  buyerEmail          String?
+  buyerPhone          String?
+  buyerGstin          String?
+  invoiceNumber       String
+  amount              Float
+  invoiceDate         DateTime
+  paymentTermsDays    Int             @default(45)
+  status              String          @default("PENDING") // PENDING, PAID, OVERDUE, DISPUTED
+  paidAt              DateTime?
+  photoUrl            String?
+  proofOfDeliveryUrl  String?         // Lorry receipt, e-way bill, signed delivery challan
+  notes               String?
+  
+  reminders           Reminder[]
+  financingLeads      FinancingLead[]
+  
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Reminder {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  buyerName    String
+  buyerContact String?
+  channel      String   @default("WHATSAPP") // WHATSAPP, EMAIL, SMS
+  tone         String   // FRIENDLY, FORMAL, URGENT_MSMED, LEGAL_SAMADHAAN
+  subject      String?
+  message      String
+  status       String   @default("LOGGED")   // LOGGED, MOCK_SENT, SENT, FAILED
+  sentAt       DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([invoiceId])
+}
+
+model FinancingLead {
+  id                String    @id @default(cuid())
+  invoiceId         String
+  invoice           Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  userId            String
+  
+  contactName       String
+  contactPhone      String
+  contactEmail      String
+  requestedAmount   Float
+  discountTenorDays Int       @default(30)
+  businessPan       String?
+  status            String    @default("SUBMITTED") // SUBMITTED, UNDER_REVIEW, CONNECTED_TO_TREDS, REJECTED
+  consentGiven      Boolean   @default(true)
+  consentAt         DateTime  @default(now())
+  notes             String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([invoiceId])
+  @@index([userId])
+}
+
+model PilotSignup {
+  id                   String   @id @default(cuid())
+  businessName         String
+  contactName          String
+  email                String
+  phone                String
+  monthlyOverdueAmount Float?
+  industry             String?
+  udyamNumber          String?
+  source               String   @default("LANDING_PAGE")
+  createdAt            DateTime @default(now())
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  event      String
+  properties String?  // JSON formatted properties
+  timestamp  DateTime @default(now())
+
+  @@index([event])
+  @@index([userId])
+}
