@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getNotificationSender, type NotificationChannel } from "@/lib/notifications/notification-sender";
 import { calculateMSMEInterest } from "@/lib/msme-calculator";
+import { getSupplierInterestRate } from "@/lib/settings/interest-rate";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -63,10 +64,23 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const targetChannel: NotificationChannel = channel.toUpperCase() === "WHATSAPP" ? "WHATSAPP" : "EMAIL";
-    const contact = buyerContact || (targetChannel === "EMAIL" ? invoice.buyerEmail : invoice.buyerPhone) || "contact@example.com";
+    const contact = (buyerContact || (targetChannel === "EMAIL" ? invoice.buyerEmail : invoice.buyerPhone) || "").trim();
+    if (!contact) {
+      return NextResponse.json(
+        { error: targetChannel === "EMAIL" ? "Add the buyer's email address before sending by email" : "Add the buyer's phone number before sending by WhatsApp" },
+        { status: 400 }
+      );
+    }
 
     // Calculate current interest metrics
-    const calcs = calculateMSMEInterest(invoice.invoiceDate, invoice.amount, invoice.paymentTermsDays, invoice.status);
+    const calcs = calculateMSMEInterest(
+      invoice.invoiceDate,
+      invoice.amount,
+      invoice.paymentTermsDays,
+      invoice.status,
+      new Date(),
+      await getSupplierInterestRate(userId)
+    );
 
     // Send through NotificationSender
     const sender = getNotificationSender(targetChannel);
@@ -80,6 +94,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       invoiceNumber: invoice.invoiceNumber,
       amount: invoice.amount,
       interestOwed: calcs.interestOwed,
+      interestRateAnnual: calcs.interestRateAnnual,
       totalClaim: calcs.totalClaimAmount,
       daysOverdue: calcs.daysOverdue,
       dueDate: invoice.invoiceDate.toISOString().split("T")[0],

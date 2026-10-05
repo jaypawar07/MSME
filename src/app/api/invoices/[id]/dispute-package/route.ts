@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSupplierInterestRate } from "@/lib/settings/interest-rate";
 import { buildDisputePackageData, generateDisputePackageHtml } from "@/lib/dispute/dispute-package-generator";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
@@ -27,6 +28,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
 
     const disputeData = buildDisputePackageData({
+      annualRate: await getSupplierInterestRate(userId),
       claimant: {
         name: invoice.user.name,
         businessName: invoice.user.businessName,

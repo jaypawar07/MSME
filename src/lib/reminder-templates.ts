@@ -1,3 +1,5 @@
+import { formatRate, MSME_STATUTORY_ANNUAL_RATE } from "@/lib/msme-calculator";
+
 export type SupportedLanguage = "en" | "hi";
 
 export interface ReminderTemplateParams {
@@ -11,6 +13,8 @@ export interface ReminderTemplateParams {
   interestOwed: number;
   totalClaim: number;
   udyamNumber?: string | null;
+  /** Section 16 rate (% p.a.) used to compute interestOwed; quoted in the notice. */
+  interestRateAnnual?: number;
   lang?: SupportedLanguage;
 }
 
@@ -23,7 +27,7 @@ export interface ReminderTemplate {
   badgeColor: string;
   recommendedWhen: string;
   recommendedWhenHi: string;
-  getSubject: (params: { invoiceNumber: string; amount: number; lang?: SupportedLanguage }) => string;
+  getSubject: (params: { invoiceNumber: string; amount: number; lang?: SupportedLanguage; interestRateAnnual?: number }) => string;
   generateBody: (params: ReminderTemplateParams) => string;
 }
 
@@ -109,11 +113,11 @@ export const REMINDER_TEMPLATES: Record<string, ReminderTemplate> = {
     badgeColor: "bg-orange-50 text-orange-700 border-orange-200",
     recommendedWhen: "16 - 30 days overdue",
     recommendedWhenHi: "16 से 30 दिन का विलंब (दंडात्मक ब्याज लागू)",
-    getSubject: ({ invoiceNumber, lang = "en" }) =>
+    getSubject: ({ invoiceNumber, lang = "en", interestRateAnnual = MSME_STATUTORY_ANNUAL_RATE }) =>
       lang === "hi"
-        ? `MSMED अधिनियम 2006 अंतर्गत मांग नोटिस: चालान #${invoiceNumber} पर 16.5% चक्रवृद्धि ब्याज लागू`
-        : `DEMAND NOTICE under MSMED Act 2006: Invoice #${invoiceNumber} Accruing 16.5% Penal Interest`,
-    generateBody: ({ buyerName, supplierName, invoiceNumber, amount, dueDate, daysOverdue, interestOwed, totalClaim, udyamNumber, lang = "en" }) => {
+        ? `MSMED अधिनियम 2006 अंतर्गत मांग नोटिस: चालान #${invoiceNumber} पर ${formatRate(interestRateAnnual)} चक्रवृद्धि ब्याज लागू`
+        : `DEMAND NOTICE under MSMED Act 2006: Invoice #${invoiceNumber} Accruing ${formatRate(interestRateAnnual)} Penal Interest`,
+    generateBody: ({ buyerName, supplierName, invoiceNumber, amount, dueDate, daysOverdue, interestOwed, totalClaim, udyamNumber, lang = "en", interestRateAnnual = MSME_STATUTORY_ANNUAL_RATE }) => {
       if (lang === "hi") {
         return (
           `MSMED अधिनियम, 2006 की धारा 15 और 16 के अंतर्गत विलंबित भुगतान का वैधानिक नोटिस\n\n` +
@@ -124,7 +128,7 @@ export const REMINDER_TEMPLATES: Record<string, ReminderTemplate> = {
           `कृपया संज्ञान लें कि चालान #${invoiceNumber} (देय तिथि: ${dueDate}) का भुगतान अभी तक अप्राप्त है और यह ${daysOverdue} दिनों से अतिदेय है।\n\n` +
           `एक उद्यम-पंजीकृत MSME इकाई होने के नाते, हमारी आपूर्ति सूक्ष्म, लघु और मध्यम उद्यम विकास (MSMED) अधिनियम, 2006 के तहत संरक्षित है।\n\n` +
           `• मूल चालान राशि: ₹${amount.toLocaleString("en-IN")}\n` +
-          `• वैधानिक चक्रवृद्धि दंडात्मक ब्याज (धारा 16 @ 16.5% वार्षिक, मासिक चक्र): ₹${interestOwed.toLocaleString("en-IN")}\n` +
+          `• वैधानिक चक्रवृद्धि दंडात्मक ब्याज (धारा 16 @ ${formatRate(interestRateAnnual)} वार्षिक, मासिक चक्र): ₹${interestOwed.toLocaleString("en-IN")}\n` +
           `• कुल वैधानिक दावा: ₹${totalClaim.toLocaleString("en-IN")}\n\n` +
           `MSMED अधिनियम की धारा 16 के तहत, विलंबित भुगतान पर RBI बैंक दर के 3 गुना चक्रवृद्धि ब्याज का भुगतान कानूनी रूप से अनिवार्य है। धारा 23 के अनुसार, यह दंडात्मक ब्याज आयकर में व्यापारिक व्यय के रूप में अमान्य है।\n\n` +
           `कृपया 48 घंटों के भीतर संपूर्ण बकाया राशि का भुगतान सुनिश्चित करें।\n\n` +
@@ -141,7 +145,7 @@ export const REMINDER_TEMPLATES: Record<string, ReminderTemplate> = {
         `Please take notice that Invoice #${invoiceNumber} dated due on ${dueDate} remains unpaid and is currently ${daysOverdue} days overdue.\n\n` +
         `As an Udyam-registered MSME enterprise, our supplies are governed under the Micro, Small and Medium Enterprises Development (MSMED) Act, 2006.\n\n` +
         `• Principal Amount: ₹${amount.toLocaleString("en-IN")}\n` +
-        `• Statutory Compounded Interest (Section 16 @ 16.5% p.a. monthly rests): ₹${interestOwed.toLocaleString("en-IN")}\n` +
+        `• Statutory Compounded Interest (Section 16 @ ${formatRate(interestRateAnnual)} p.a. monthly rests): ₹${interestOwed.toLocaleString("en-IN")}\n` +
         `• Total Statutory Claim to Date: ₹${totalClaim.toLocaleString("en-IN")}\n\n` +
         `Under Section 16 of the MSMED Act, the buyer is legally obligated to pay compound interest at 3x the RBI bank rate on delayed payments. Furthermore, under Section 23 of the Act, penal interest paid on MSME delayed payments is strictly non-deductible as business expense for Income Tax.\n\n` +
         `Please clear the total outstanding balance within 48 hours.\n\n` +
@@ -159,11 +163,11 @@ export const REMINDER_TEMPLATES: Record<string, ReminderTemplate> = {
     badgeColor: "bg-red-50 text-red-700 border-red-200",
     recommendedWhen: "30+ days overdue",
     recommendedWhenHi: "30+ दिन अतिदेय (45-दिवसीय वैधानिक सीमा उल्लंघन)",
-    getSubject: ({ invoiceNumber, lang = "en" }) =>
+    getSubject: ({ invoiceNumber, lang = "en", interestRateAnnual = MSME_STATUTORY_ANNUAL_RATE }) =>
       lang === "hi"
         ? `MSME समाधान पोर्टल पर वाद दायर करने से पूर्व अंतिम कानूनी नोटिस: चालान #${invoiceNumber}`
         : `FINAL NOTICE BEFORE FILING ON MSME SAMADHAAN PORTAL: Invoice #${invoiceNumber}`,
-    generateBody: ({ buyerName, supplierName, invoiceNumber, amount, dueDate, daysOverdue, interestOwed, totalClaim, udyamNumber, lang = "en" }) => {
+    generateBody: ({ buyerName, supplierName, invoiceNumber, amount, dueDate, daysOverdue, interestOwed, totalClaim, udyamNumber, lang = "en", interestRateAnnual = MSME_STATUTORY_ANNUAL_RATE }) => {
       if (lang === "hi") {
         return (
           `MSEFC (MSME समाधान) कानूनी कार्यवाही से पूर्व अंतिम विधिक नोटिस\n\n` +

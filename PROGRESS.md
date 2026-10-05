@@ -12,7 +12,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | Area | State |
 | :--- | :--- |
 | Type check (`tsc --noEmit`) | ✅ clean |
-| Test suite (`npm test`) | ✅ 56 / 56 passing (was ❌ crashing before 2026-10-05) |
+| Test suite (`npm test`) | ✅ 67 / 67 passing (was ❌ crashing before 2026-10-05) |
 | Tests that exercise real `src/` code | ✅ 8 of 8 files; multi-tenant test calls real API routes on a throwaway `prisma/test.db` |
 | Production build (`next build`) | ✅ clean, no warnings |
 | Version control | ✅ git, `main` tracks github.com/jaypawar07/MSME |
@@ -32,7 +32,10 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | B9 | Low | No `ADMIN` user is seeded, so `/admin/buyer-risk` only shows the non-admin view locally. | `prisma/seed.js` |
 | ~~B4~~ | ✅ fixed 2026-10-05 | 4 test files re-implemented logic instead of testing it. All now import real code. | `tests/` |
 | B10a | ✅ fixed 2026-10-05 | Auto-reminders ignored Settings. Now follow the Day 1/30/45/60 switches, quiet hours (India time) and the Email/WhatsApp toggles. | `auto-scheduler.ts` |
-| B10b | **High (product/legal)** | Custom interest rate in Settings is still ignored: calculator, notices, dispute package and screens hard-code 16.5% (~30 places). Must change together so a notice never quotes one rate while charging another. | `msme-calculator.ts`, `reminder-templates.ts`, `dispute-package-generator.ts`, components |
+| ~~B10b~~ | ✅ fixed 2026-10-05 | Custom interest rate was ignored. Now drives the calculation **and** every quoted rate: dashboard, reminder notices (EN/HI), notification email, dispute package, data export. | see change log |
+| B14 | **Watch (legal)** | RBI policy decision due **7 Oct 2026**. Bank Rate is 5.50% today (so 16.5% is correct). If it changes, suppliers must update Settings; the explanatory copy (banner, onboarding, landing, page meta) still says "currently 16.5%". Consider an admin-level default instead of per-supplier entry. | `MSMEDSection16Banner.tsx`, `OnboardingGuideModal.tsx`, landing |
+| B15 | Medium (legal, needs CA/lawyer) | When the RBI rate changes mid-delay, the app applies today's rate to the whole period. Should earlier months use the rate in force then? `RateAuditLog` already stores history if needed. | `msme-calculator.ts` |
+| B16 | Low | Shared buyer-risk view (admin page + dashboard modal) computes all suppliers at the statutory 16.5% default; correct for comparison, but differs from a supplier's own custom rate. | `buyer-risk-aggregator.ts` |
 | B11 | Low (docs) | README's interest formula (whole months compounded + simple interest on leftover days) differs from the code (fractional-month compounding). Confirm which is legally correct, then align. | `README.md`, `src/lib/msme-calculator.ts` |
 | ~~B12~~ | ✅ fixed 2026-10-05 | Scheduler used Email even when disabled, and sent to a made-up `accounts@buyer.com` when the buyer had no contact. Now skips with a reason shown in the widget. | `auto-scheduler.ts` |
 | B13 | Low | Manual "Send Reminder" doesn't check quiet hours (deliberate for now: it's an explicit user action). Revisit when real WhatsApp sending is live. | `api/invoices/[id]/reminders` |
@@ -84,6 +87,13 @@ Legend: ⬜ not started · 🟡 partial · ✅ done
 - **Tests:** 44 → 56. New `tests/auto-reminder-runner.test.mjs` runs the real scheduler on the test DB. Mutation-checked: disabling the quiet-hours check or the milestone switches turns tests red.
 - **Verified:** `npm run check` 56/56, `next build` compiles. No dev-server run, to avoid creating reminder rows in the dev DB (covered by the runner test).
 
+### 2026-10-05 (session 4): supplier's interest rate used everywhere
+- **Checked:** RBI Bank Rate is 5.50% (= MSF; repo 5.25%), so the 16.5% default is correct today. My assumption that the app used the repo rate was wrong. Next RBI decision 7 Oct 2026 (B14).
+- **Feature:** `calculateMSMEInterest` takes the supplier's rate; `getSupplierInterestRate(userId)` reads it from Settings. Wired into auto-reminders, manual reminders, dispute package, data export, and the invoices API (dashboard). Notices, email, dispute package and dashboard labels quote `formatRate(calcs.interestRateAnnual)`, the same number that produced the amount.
+- **Fixed:** data export read the custom rate but never used it. Manual "Send Reminder" sent to a placeholder `contact@example.com` when the buyer had no contact; now returns 400 with a clear message.
+- **Tests:** 56 → 67 (`interest-rate.test.mjs`, `interest-rate-routes.test.mjs`). A supplier at 18% gets 18% in the notice subject/body and dispute filing, with no "16.5" anywhere. Mutation-checked three ways (scheduler, template, dispute route).
+- **Verified in browser:** dashboard renders the rate labels in English and Hindi, no console errors. Added `.claude/launch.json` (session root) for `npm run dev` previews.
+
 ---
 
 ## 🧠 Lessons learned (mistakes → rules)
@@ -104,3 +114,6 @@ Each time a mistake is found, add a line here so it isn't repeated.
 12. **If the explanation of *why* something was skipped needs re-running the logic with tweaked inputs, restructure instead.** Pull out the question ("which milestone is due?") as its own function. *(2026-10-05)*
 13. **A test that passes on the first run hasn't proven anything yet.** Mutate the code and watch it fail. *(2026-10-05)*
 14. **Tests must not be able to reach real external services.** Strip API keys in setup and assert they're absent. *(2026-10-05)*
+15. **Check a legal or financial "fact" before acting on it.** I suspected 16.5% was wrong (repo vs Bank Rate). A 1-minute search showed it was right. *(2026-10-05)*
+16. **A quoted rate and the amount computed from it must come from the same variable.** Never print a literal rate next to a computed amount. *(2026-10-05)*
+17. **A variable that is read but never used is a bug signal.** `annualRate` in the export route was exactly that. *(2026-10-05)*

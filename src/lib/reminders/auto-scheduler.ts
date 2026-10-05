@@ -33,7 +33,7 @@ export const AUTO_REMINDER_MILESTONES: ScheduleMilestone[] = [
     key: "DAY_30",
     thresholdDays: 30,
     templateTone: "URGENT_MSMED",
-    label: "Day 30 Past Due (Section 16 Statutory Demand @ 16.5%)",
+    label: "Day 30 Past Due (Section 16 Statutory Demand)",
     badge: "Milestone: Day 30",
   },
   {
@@ -209,14 +209,16 @@ export function evaluateInvoiceForAutoReminders(
   },
   existingReminders: ReminderHistory,
   asOfDate: Date = new Date(),
-  prefs: ReminderPreferences = DEFAULT_REMINDER_PREFERENCES
+  prefs: ReminderPreferences = DEFAULT_REMINDER_PREFERENCES,
+  interestRateAnnual?: number | null
 ): PlannedMilestoneReminder[] {
   const calcs = calculateMSMEInterest(
     invoice.invoiceDate,
     invoice.amount,
     invoice.paymentTermsDays,
     invoice.status,
-    asOfDate
+    asOfDate,
+    interestRateAnnual
   );
 
   const dueMilestones = getDueMilestones(invoice, existingReminders, asOfDate, prefs);
@@ -246,11 +248,13 @@ export function evaluateInvoiceForAutoReminders(
       interestOwed: calcs.interestOwed,
       totalClaim: calcs.totalClaimAmount,
       udyamNumber,
+      interestRateAnnual: calcs.interestRateAnnual,
     });
 
     const subject = `[${milestone.key}] ${template.getSubject({
       invoiceNumber: invoice.invoiceNumber,
       amount: invoice.amount,
+      interestRateAnnual: calcs.interestRateAnnual,
     })}`;
 
     planned.push({
@@ -296,6 +300,7 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
 
   for (const inv of invoices) {
     const prefs = toReminderPreferences(inv.user.settings);
+    const interestRateAnnual = inv.user.settings?.effectiveAnnualRate;
     if (getDueMilestones(inv, inv.reminders, asOfDate, prefs).length === 0) continue;
 
     // Nothing is recorded while held back, so the reminder goes out on the first run after quiet hours.
@@ -308,11 +313,11 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
       continue;
     }
 
-    const plannedList = evaluateInvoiceForAutoReminders(inv, inv.reminders, asOfDate, prefs);
+    const plannedList = evaluateInvoiceForAutoReminders(inv, inv.reminders, asOfDate, prefs, interestRateAnnual);
 
     for (const planned of plannedList) {
       try {
-        const calcs = calculateMSMEInterest(inv.invoiceDate, inv.amount, inv.paymentTermsDays, inv.status, asOfDate);
+        const calcs = calculateMSMEInterest(inv.invoiceDate, inv.amount, inv.paymentTermsDays, inv.status, asOfDate, interestRateAnnual);
         const sender = getNotificationSender(planned.channel);
 
         const sendResult = await sender.send({
@@ -325,6 +330,7 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
           invoiceNumber: inv.invoiceNumber,
           amount: inv.amount,
           interestOwed: calcs.interestOwed,
+          interestRateAnnual: calcs.interestRateAnnual,
           totalClaim: calcs.totalClaimAmount,
           daysOverdue: calcs.daysOverdue,
           metadata: { milestone: planned.milestone },

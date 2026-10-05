@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { type DisputePackageData } from "@/lib/dispute/dispute-package-generator";
+import { formatRate } from "@/lib/msme-calculator";
 
 interface DisputePackageModalProps {
   isOpen: boolean;
@@ -190,7 +191,7 @@ export function DisputePackageModal({
                     ₹{data.calcs.interestOwed.toLocaleString("en-IN")}
                   </span>
                   <span className="text-[10px] text-red-600 font-medium block mt-0.5">
-                    3x RBI Rate (16.5% p.a.)
+                    3x RBI Rate ({formatRate(data.calcs.interestRateAnnual)} p.a.)
                   </span>
                 </div>
 

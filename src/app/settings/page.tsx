@@ -423,7 +423,7 @@ export default function SettingsPage() {
                           <Badge variant="destructive" className="text-[10px]">Day 45 (Statutory)</Badge>
                           <span>Section 16 Penal Interest Demand</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">Notifies 16.5% compound monthly penal interest accrual.</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Notifies {Number((settings.rbiBaseRate * settings.statutoryMultiplier).toFixed(2))}% compound monthly penal interest accrual.</p>
                       </div>
                       <input
                         type="checkbox"

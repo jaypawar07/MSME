@@ -5,7 +5,7 @@
  */
 
 import { format } from "date-fns";
-import { calculateMSMEInterest, type InvoiceCalculations, MSME_STATUTORY_ANNUAL_RATE } from "@/lib/msme-calculator";
+import { calculateMSMEInterest, formatRate, type InvoiceCalculations } from "@/lib/msme-calculator";
 
 export interface DisputePartyDetails {
   name: string;
@@ -57,6 +57,8 @@ export function buildDisputePackageData(params: {
   invoice: DisputeInvoiceDetails;
   reminders: DisputeReminderTrailItem[];
   asOfDate?: Date;
+  /** Supplier's Section 16 rate (% p.a.) from Settings; statutory default if omitted. */
+  annualRate?: number | null;
 }): DisputePackageData {
   const asOf = params.asOfDate || new Date();
   const calcs = calculateMSMEInterest(
@@ -64,7 +66,8 @@ export function buildDisputePackageData(params: {
     params.invoice.amount,
     params.invoice.paymentTermsDays,
     "OVERDUE",
-    asOf
+    asOf,
+    params.annualRate
   );
 
   const formattedDueDate = format(calcs.dueDate, "dd MMMM yyyy");
@@ -76,7 +79,7 @@ export function buildDisputePackageData(params: {
     `Application under Section 18 of the MSMED Act, 2006 by ${params.claimant.businessName || params.claimant.name} ` +
     `(Udyam: ${params.claimant.udyamNumber || "On File"}) against ${params.respondent.name} ` +
     `for recovery of delayed payment of Principal Amount ${formattedAmount} along with accrued Section 16 compound ` +
-    `interest of ${formattedInterest} (computed @ ${MSME_STATUTORY_ANNUAL_RATE}% p.a. with monthly rests), ` +
+    `interest of ${formattedInterest} (computed @ ${formatRate(calcs.interestRateAnnual)} p.a. with monthly rests), ` +
     `making a total statutory claim of ${formattedTotal}, overdue by ${calcs.daysOverdue} days past the statutory 45-day cap.`;
 
   return {
@@ -102,6 +105,7 @@ export function generateDisputePackageHtml(data: DisputePackageData): string {
 
   const formattedAmount = `₹${data.invoice.amount.toLocaleString("en-IN")}`;
   const formattedInterest = `₹${data.calcs.interestOwed.toLocaleString("en-IN")}`;
+  const formattedRate = formatRate(data.calcs.interestRateAnnual);
   const formattedTotal = `₹${data.calcs.totalClaimAmount.toLocaleString("en-IN")}`;
 
   const remindersHtml = data.reminderTrail.length > 0
@@ -219,12 +223,12 @@ export function generateDisputePackageHtml(data: DisputePackageData): string {
         </tr>
         <tr>
           <td style="font-size: 14px; font-weight: 700; color: #1e293b;">${formattedAmount}</td>
-          <td style="font-size: 14px; font-weight: 700; color: #991b1b;">${formattedInterest} <span style="font-size: 10px; font-weight: normal;">(@ 16.5% p.a.)</span></td>
+          <td style="font-size: 14px; font-weight: 700; color: #991b1b;">${formattedInterest} <span style="font-size: 10px; font-weight: normal;">(@ ${formattedRate} p.a.)</span></td>
           <td><span class="claim-total">${formattedTotal}</span></td>
         </tr>
       </table>
       <p style="font-size: 10px; color: #64748b; margin: 8px 0 0 0;">
-        * Interest computed strictly in compliance with Section 16 of the MSMED Act 2006 (Compounded with monthly rests at three times the RBI Bank Rate of 5.5% = 16.5% per annum).
+        * Interest computed strictly in compliance with Section 16 of the MSMED Act 2006 (Compounded with monthly rests at three times the RBI Bank Rate = ${formattedRate} per annum).
       </p>
     </div>
   </div>
@@ -284,7 +288,7 @@ export function generateDisputePackageHtml(data: DisputePackageData): string {
       <strong>PRAYER:</strong> The Claimant respectfully prays that the Hon'ble Council may be pleased to:
       <ol style="margin: 4px 0; padding-left: 20px;">
         <li>Direct the Respondent to pay the Principal outstanding sum of <strong>${formattedAmount}</strong> immediately.</li>
-        <li>Direct the Respondent to pay compounded interest of <strong>${formattedInterest}</strong> plus further interest accruing at 16.5% p.a. until realization under Section 16 of the Act.</li>
+        <li>Direct the Respondent to pay compounded interest of <strong>${formattedInterest}</strong> plus further interest accruing at ${formattedRate} p.a. until realization under Section 16 of the Act.</li>
         <li>Award legal and administrative recovery costs under Section 18(3) of the Act.</li>
       </ol>
     </div>

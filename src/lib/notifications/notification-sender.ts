@@ -7,6 +7,8 @@
  * Swappable and decoupled from the rest of the application.
  */
 
+import { formatRate, MSME_STATUTORY_ANNUAL_RATE } from "@/lib/msme-calculator";
+
 export type NotificationChannel = "EMAIL" | "WHATSAPP" | "SMS";
 
 export interface NotificationPayload {
@@ -20,6 +22,8 @@ export interface NotificationPayload {
   invoiceNumber: string;
   amount: number;
   interestOwed: number;
+  /** Section 16 rate (% p.a.) used to compute interestOwed. Defaults to the statutory rate. */
+  interestRateAnnual?: number;
   totalClaim: number;
   daysOverdue: number;
   dueDate?: string;
@@ -130,7 +134,7 @@ export class EmailNotificationSender implements NotificationSender {
     };
   }
 
-  private generateDefaultHtml(payload: NotificationPayload): string {
+  generateDefaultHtml(payload: NotificationPayload): string {
     const formattedAmount = `₹${payload.amount.toLocaleString("en-IN")}`;
     const formattedInterest = `₹${payload.interestOwed.toLocaleString("en-IN")}`;
     const formattedTotal = `₹${payload.totalClaim.toLocaleString("en-IN")}`;
@@ -185,7 +189,7 @@ export class EmailNotificationSender implements NotificationSender {
             <td><span style="color: #dc2626; font-weight: 600;">${payload.daysOverdue} Days</span></td>
           </tr>
           <tr>
-            <td><strong>Accrued Penal Interest (16.5% p.a.)</strong></td>
+            <td><strong>Accrued Penal Interest (${formatRate(payload.interestRateAnnual ?? MSME_STATUTORY_ANNUAL_RATE)} p.a.)</strong></td>
             <td><strong>${formattedInterest}</strong></td>
           </tr>
           <tr>

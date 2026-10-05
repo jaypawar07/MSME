@@ -101,6 +101,7 @@ export function SendReminderModal({
       daysOverdue: inv.calcs.daysOverdue,
       interestOwed: inv.calcs.interestOwed,
       totalClaim: inv.calcs.totalClaimAmount,
+      interestRateAnnual: inv.calcs.interestRateAnnual,
       udyamNumber,
       lang,
     });
@@ -109,6 +110,7 @@ export function SendReminderModal({
       invoiceNumber: inv.invoiceNumber,
       amount: inv.amount,
       lang,
+      interestRateAnnual: inv.calcs.interestRateAnnual,
     });
 
     setSubject(sub);

@@ -57,7 +57,9 @@ export async function GET(req: NextRequest) {
         inv.invoiceDate,
         inv.amount,
         inv.paymentTermsDays,
-        inv.status
+        inv.status,
+        new Date(),
+        annualRate
       );
 
       return [

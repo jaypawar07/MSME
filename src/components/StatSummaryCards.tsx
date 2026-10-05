@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { formatINR, type InvoiceCalculations } from "@/lib/msme-calculator";
+import { formatINR, formatRate, MSME_STATUTORY_ANNUAL_RATE, type InvoiceCalculations } from "@/lib/msme-calculator";
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -30,6 +30,7 @@ interface StatSummaryCardsProps {
 
 export function StatSummaryCards({ invoices }: StatSummaryCardsProps) {
   const { t, isHindi } = useLanguage();
+  const rateLabel = formatRate(invoices[0]?.calcs.interestRateAnnual ?? MSME_STATUTORY_ANNUAL_RATE);
 
   // Aggregate statistics
   const activeInvoices = invoices.filter((inv) => inv.status !== "PAID");
@@ -109,7 +110,7 @@ export function StatSummaryCards({ invoices }: StatSummaryCardsProps) {
               </span>
             </div>
             <Badge variant="amber" className="text-[10px] font-bold font-mono px-2 py-0.5">
-              16.5% Compounded
+              {rateLabel} Compounded
             </Badge>
           </div>
 
@@ -118,7 +119,7 @@ export function StatSummaryCards({ invoices }: StatSummaryCardsProps) {
           </div>
 
           <div className="mt-2.5 flex items-center justify-between text-xs text-indigo-200/80 pt-2 border-t border-indigo-800/60 relative z-10">
-            <span className="truncate">{t.accruingAt165}</span>
+            <span className="truncate">{t.accruingAtRate.replace("{rate}", rateLabel)}</span>
             <span className="font-mono text-amber-400 font-semibold shrink-0 text-[11px]">
               {isHindi ? "3x RBI दर" : "3x RBI Bank Rate"}
             </span>
@@ -196,8 +197,8 @@ export function StatSummaryCards({ invoices }: StatSummaryCardsProps) {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-sm text-slate-100 tracking-tight">
                 {isHindi
-                  ? "कुल वैधानिक विधिक दावा मूल्य (मूल राशि + 16.5% चक्रवृद्धि ब्याज)"
-                  : "Total Statutory Legal Claim Value (Principal + 16.5% Compound Interest)"}
+                  ? `कुल वैधानिक विधिक दावा मूल्य (मूल राशि + ${rateLabel} चक्रवृद्धि ब्याज)`
+                  : `Total Statutory Legal Claim Value (Principal + ${rateLabel} Compound Interest)`}
               </span>
               <Badge variant="amber" className="text-[10px] font-mono px-2 py-0.5 font-bold">
                 {isHindi ? "समाधान पोर्टल तैयार" : "MSEFC Samadhaan Ready"}
@@ -205,8 +206,8 @@ export function StatSummaryCards({ invoices }: StatSummaryCardsProps) {
             </div>
             <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
               {isHindi
-                ? "45 दिनों के भीतर भुगतान न करने पर खरीदार MSMED अधिनियम 2006 की धारा 16 के तहत मूल राशि + 16.5% मासिक चक्रवृद्धि ब्याज देने हेतु कानूनी रूप से बाध्य है।"
-                : "Buyers failing to pay within 45 days are legally liable for the principal plus 16.5% monthly compounded interest under Section 16 of the MSMED Act, 2006."}
+                ? `45 दिनों के भीतर भुगतान न करने पर खरीदार MSMED अधिनियम 2006 की धारा 16 के तहत मूल राशि + ${rateLabel} मासिक चक्रवृद्धि ब्याज देने हेतु कानूनी रूप से बाध्य है।`
+                : `Buyers failing to pay within 45 days are legally liable for the principal plus ${rateLabel} monthly compounded interest under Section 16 of the MSMED Act, 2006.`}
             </p>
           </div>
         </div>

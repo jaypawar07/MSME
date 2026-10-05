@@ -35,8 +35,14 @@ export function calculateMSMEInterest(
   amount: number,
   paymentTermsDays: number = DEFAULT_TERMS_DAYS,
   status: string = "PENDING",
-  asOfDate: Date = new Date()
+  asOfDate: Date = new Date(),
+  annualRatePercent?: number | null
 ): InvoiceCalculations {
+  // The supplier's rate from Settings (3 × RBI Bank Rate); the statutory default if unset or invalid.
+  const ratePercent =
+    typeof annualRatePercent === "number" && Number.isFinite(annualRatePercent) && annualRatePercent > 0
+      ? annualRatePercent
+      : MSME_STATUTORY_ANNUAL_RATE;
   const invDate = typeof invoiceDateInput === "string" ? parseISO(invoiceDateInput) : invoiceDateInput;
   const terms = Math.min(Math.max(paymentTermsDays || DEFAULT_TERMS_DAYS, 1), 45); // Max 45 days under Section 15
   const dueDate = addDays(invDate, terms);
@@ -48,9 +54,9 @@ export function calculateMSMEInterest(
   const isOverdue = daysOverdue > 0 || status === "OVERDUE";
   const isStatutoryDelayed = daysElapsed > 45 || daysOverdue > 0;
 
-  // Monthly compounding calculation: 16.5% per year -> 1.375% per month
+  // Monthly compounding calculation: e.g. 16.5% per year -> 1.375% per month
   let interestOwed = 0;
-  const annualRate = MSME_STATUTORY_ANNUAL_RATE / 100;
+  const annualRate = ratePercent / 100;
   const monthlyRate = annualRate / 12;
 
   if (status !== "PAID" && isOverdue && daysOverdue > 0) {
@@ -96,13 +102,18 @@ export function calculateMSMEInterest(
     isOverdue,
     statusBadgeColor,
     urgencyLabel,
-    interestRateAnnual: MSME_STATUTORY_ANNUAL_RATE,
+    interestRateAnnual: ratePercent,
     interestRateMonthly: Number((monthlyRate * 100).toFixed(3)),
     interestOwed,
     totalClaimAmount,
     rbiCitation: `Interest owed: ₹${interestOwed.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Section 16, MSMED Act 2006`,
     isStatutoryDelayed,
   };
+}
+
+/** "16.5%", "18%", "17.25%": the way a rate is quoted to buyers. */
+export function formatRate(ratePercent: number): string {
+  return `${Number(ratePercent.toFixed(2))}%`;
 }
 
 export function formatINR(amount: number): string {

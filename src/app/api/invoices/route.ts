@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSupplierInterestRate } from "@/lib/settings/interest-rate";
 
 export async function GET(req: Request) {
   try {
@@ -31,7 +32,10 @@ export async function GET(req: Request) {
       },
     });
 
-    return NextResponse.json({ invoices });
+    // The supplier's Section 16 rate, so the dashboard computes and quotes the same rate as notices.
+    const interestRateAnnual = await getSupplierInterestRate(userId);
+
+    return NextResponse.json({ invoices, interestRateAnnual });
   } catch (error: any) {
     console.error("Error fetching invoices:", error);
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });

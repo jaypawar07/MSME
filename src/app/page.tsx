@@ -84,7 +84,9 @@ export default function DashboardPage() {
             inv.invoiceDate,
             inv.amount,
             inv.paymentTermsDays,
-            inv.status
+            inv.status,
+            new Date(),
+            data.interestRateAnnual
           );
           return {
             ...inv,

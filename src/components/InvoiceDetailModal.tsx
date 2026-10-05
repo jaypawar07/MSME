@@ -19,7 +19,7 @@ import {
   Edit2
 } from "lucide-react";
 import { format } from "date-fns";
-import { type InvoiceCalculations, formatINR } from "@/lib/msme-calculator";
+import { type InvoiceCalculations, formatINR, formatRate } from "@/lib/msme-calculator";
 
 interface InvoiceDetailModalProps {
   isOpen: boolean;
@@ -140,7 +140,7 @@ export function InvoiceDetailModal({
                     +{formatINR(invoice.calcs.interestOwed)}
                   </div>
                   <span className="text-[10px] text-slate-400">
-                    16.5% p.a. monthly compounded ({invoice.calcs.daysOverdue} days overdue)
+                    {formatRate(invoice.calcs.interestRateAnnual)} p.a. monthly compounded ({invoice.calcs.daysOverdue} days overdue)
                   </span>
                 </div>
               )}

@@ -21,7 +21,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
-import { type InvoiceCalculations, formatINR } from "@/lib/msme-calculator";
+import { type InvoiceCalculations, formatINR, formatRate } from "@/lib/msme-calculator";
 
 interface Reminder {
   id: string;
@@ -331,7 +331,7 @@ export function InvoiceList({
                           Interest owed: ₹{calcs.interestOwed.toLocaleString("en-IN", { minimumFractionDigits: 2 })} — Section 16, MSMED Act 2006
                         </span>
                         <span className="text-[10px] text-red-700 bg-white/80 px-2 py-0.5 rounded border border-red-200 font-medium">
-                          16.5% p.a. monthly compound
+                          {formatRate(calcs.interestRateAnnual)} p.a. monthly compound
                         </span>
                       </div>
                     ) : (

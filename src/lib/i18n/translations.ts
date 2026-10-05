@@ -30,7 +30,7 @@ export interface Translations {
   totalReceivables: string;
   activeInvoices: string;
   sec16Interest: string;
-  accruingAt165: string;
+  accruingAtRate: string; // "{rate}" is replaced with the supplier's rate
   overdueBeyond45d: string;
   statutoryDelayed: string;
   settledAmount: string;
@@ -109,7 +109,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Translations> = {
     totalReceivables: "Total Receivables",
     activeInvoices: "active invoices",
     sec16Interest: "Sec 16 MSMED Interest",
-    accruingAt165: "Accruing @ 16.5% p.a.",
+    accruingAtRate: "Accruing @ {rate} p.a.",
     overdueBeyond45d: "Overdue (>45 Days)",
     statutoryDelayed: "Statutory delayed capital",
     settledAmount: "Settled / Paid",
@@ -187,7 +187,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Translations> = {
     totalReceivables: "कुल प्राप्य राशि",
     activeInvoices: "सक्रिय बिल",
     sec16Interest: "धारा 16 एमएसएमई ब्याज",
-    accruingAt165: "16.5% वार्षिक चक्रवृद्धि दर",
+    accruingAtRate: "{rate} वार्षिक चक्रवृद्धि दर",
     overdueBeyond45d: "45 दिन से अधिक बकाया",
     statutoryDelayed: "अवरुद्ध वैधानिक पूंजी",
     settledAmount: "प्राप्त / चुकता राशि",
