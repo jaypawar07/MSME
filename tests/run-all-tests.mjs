@@ -9,3 +9,4 @@ import "./settings-and-roles.test.mjs";
 import "./auto-reminder-runner.test.mjs";
 import "./interest-rate.test.mjs";
 import "./interest-rate-routes.test.mjs";
+import "./cron-reminders.test.mjs";

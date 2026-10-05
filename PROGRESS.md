@@ -12,7 +12,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | Area | State |
 | :--- | :--- |
 | Type check (`tsc --noEmit`) | ✅ clean |
-| Test suite (`npm test`) | ✅ 67 / 67 passing (was ❌ crashing before 2026-10-05) |
+| Test suite (`npm test`) | ✅ 73 / 73 passing (was ❌ crashing before 2026-10-05) |
 | Tests that exercise real `src/` code | ✅ 8 of 8 files; multi-tenant test calls real API routes on a throwaway `prisma/test.db` |
 | Production build (`next build`) | ✅ clean, no warnings |
 | Version control | ✅ git, `main` tracks github.com/jaypawar07/MSME |
@@ -36,6 +36,9 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | B14 | **Watch (legal)** | RBI policy decision due **7 Oct 2026**. Bank Rate is 5.50% today (so 16.5% is correct). If it changes, suppliers must update Settings; the explanatory copy (banner, onboarding, landing, page meta) still says "currently 16.5%". Consider an admin-level default instead of per-supplier entry. | `MSMEDSection16Banner.tsx`, `OnboardingGuideModal.tsx`, landing |
 | B15 | Medium (legal, needs CA/lawyer) | When the RBI rate changes mid-delay, the app applies today's rate to the whole period. Should earlier months use the rate in force then? `RateAuditLog` already stores history if needed. | `msme-calculator.ts` |
 | B16 | Low | Shared buyer-risk view (admin page + dashboard modal) computes all suppliers at the statutory 16.5% default; correct for comparison, but differs from a supplier's own custom rate. | `buyer-risk-aggregator.ts` |
+| B17 | Medium | Vercel may occasionally deliver a cron run twice; two overlapping runs could send a duplicate notice (both read history before either writes). Add a per-invoice/milestone unique key or a run lock before real sending goes live. | `auto-scheduler.ts`, `schema.prisma` |
+| B18 | Low | The cron runs once a day at 09:00 IST. A supplier whose quiet hours cover 09:00 will never get automatic reminders. Validate quiet hours in Settings or run hourly (needs Vercel Pro). | `settings/page.tsx`, `vercel.json` |
+| B19 | Low | Scheduler loads every open invoice and its reminders in one query. Fine for a pilot; paginate before thousands of suppliers. | `runAutoReminderScheduler` |
 | B11 | Low (docs) | README's interest formula (whole months compounded + simple interest on leftover days) differs from the code (fractional-month compounding). Confirm which is legally correct, then align. | `README.md`, `src/lib/msme-calculator.ts` |
 | ~~B12~~ | ✅ fixed 2026-10-05 | Scheduler used Email even when disabled, and sent to a made-up `accounts@buyer.com` when the buyer had no contact. Now skips with a reason shown in the widget. | `auto-scheduler.ts` |
 | B13 | Low | Manual "Send Reminder" doesn't check quiet hours (deliberate for now: it's an explicit user action). Revisit when real WhatsApp sending is live. | `api/invoices/[id]/reminders` |
@@ -48,7 +51,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | :- | :- | :- |
 | F1 | OCR invoice extraction (buyer, GSTIN, amount, date) | 🟡 stub exists (`src/lib/ocr/invoice-ocr.ts`, `/api/ocr`) |
 | F2 | Real WhatsApp / Email delivery (Meta Cloud API / Resend) | 🟡 implemented in `src/lib/notifications/`, active only when `RESEND_API_KEY` / `WHATSAPP_*` env vars are set; untested against the real APIs |
-| F3 | Scheduled auto-reminders (cron) | 🟡 scheduler fixed, honours Settings, tested end-to-end on test DB; **no cron trigger yet** (runs only via the widget's button) |
+| F3 | Scheduled auto-reminders (cron) | ✅ daily 09:00 IST via Vercel Cron (`vercel.json` → `/api/cron/reminders`, needs `CRON_SECRET`); honours all Settings. Not yet run on a real deployment |
 | F4 | Tally Prime / Zoho Books sync | 🟡 CSV import only |
 | F5 | MSME Samadhaan / MSEFC petition PDF | 🟡 dispute package HTML exists |
 | F6 | UPI QR / payment links in reminders | ⬜ not started |
@@ -94,6 +97,12 @@ Legend: ⬜ not started · 🟡 partial · ✅ done
 - **Tests:** 56 → 67 (`interest-rate.test.mjs`, `interest-rate-routes.test.mjs`). A supplier at 18% gets 18% in the notice subject/body and dispute filing, with no "16.5" anywhere. Mutation-checked three ways (scheduler, template, dispute route).
 - **Verified in browser:** dashboard renders the rate labels in English and Hindi, no console errors. Added `.claude/launch.json` (session root) for `npm run dev` previews.
 
+### 2026-10-05 (session 5): reminders run automatically every day
+- **Feature:** `/api/cron/reminders` + `vercel.json` cron (03:30 UTC = 09:00 IST) runs the scheduler for all suppliers. DEPLOYMENT.md already described this endpoint, but it didn't exist. Auth: `Authorization: Bearer <CRON_SECRET>`, constant-time compare, **fails closed** (503) when the secret is unset. Response is counts only (no buyer emails/phones).
+- **Fixed:** `.env.example` shipped a fake `RESEND_API_KEY`. Copying it to `.env` switched on real sending with an invalid key, so every reminder FAILED. Now empty, with `CRON_SECRET` documented.
+- **Tests:** 67 → 73 (`cron-reminders.test.mjs`): no secret, wrong/missing token, quiet hours, sends for all suppliers, no contact leak, route wiring, schedule in `vercel.json`. Handler takes the time as a parameter, so tests are deterministic. Mutation-checked (auth removed; log leaked).
+- **Verified:** `npm run check` 73/73, `next build` compiles, route is dynamic.
+
 ---
 
 ## 🧠 Lessons learned (mistakes → rules)
@@ -117,3 +126,6 @@ Each time a mistake is found, add a line here so it isn't repeated.
 15. **Check a legal or financial "fact" before acting on it.** I suspected 16.5% was wrong (repo vs Bank Rate). A 1-minute search showed it was right. *(2026-10-05)*
 16. **A quoted rate and the amount computed from it must come from the same variable.** Never print a literal rate next to a computed amount. *(2026-10-05)*
 17. **A variable that is read but never used is a bug signal.** `annualRate` in the export route was exactly that. *(2026-10-05)*
+18. **Docs can describe code that doesn't exist.** Grep for every endpoint/env var a doc promises. *(2026-10-05)*
+19. **Example config must be safe to copy as-is.** Placeholder secrets that look real switch on real integrations. *(2026-10-05)*
+20. **Never branch a test on the wall clock.** Pass the time in, so every run checks the same thing. *(2026-10-05)*

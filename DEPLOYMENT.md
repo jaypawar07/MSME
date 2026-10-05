@@ -102,7 +102,13 @@ In `vercel.json`:
 ```
 *(Runs daily at 03:30 UTC = 09:00 AM IST).*
 
-To secure this endpoint, Vercel automatically passes `Authorization: Bearer <CRON_SECRET>` in the header.
+To secure this endpoint, Vercel automatically passes `Authorization: Bearer <CRON_SECRET>` in the header. If `CRON_SECRET` is not set, the endpoint returns `503` and sends nothing; a wrong or missing token returns `401`.
+
+Each run honours every supplier's Settings (Day 1/30/45/60 switches, quiet hours in IST, Email/WhatsApp toggles, interest rate). The response contains counts only, never buyer contact details. To trigger a run manually:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-settlr-domain.vercel.app/api/cron/reminders
+```
 
 ---
 
