@@ -19,8 +19,8 @@ import {
   Globe
 } from "lucide-react";
 import { format } from "date-fns";
-import { REMINDER_TEMPLATES, getRecommendedTone, ReminderTemplate, SupportedLanguage } from "@/lib/reminder-templates";
-import { InvoiceCalculations } from "@/lib/msme-calculator";
+import { REMINDER_TEMPLATES, getRecommendedTone, type ReminderTemplate, type SupportedLanguage } from "@/lib/reminder-templates";
+import { type InvoiceCalculations } from "@/lib/msme-calculator";
 import { useSession } from "next-auth/react";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import { trackPilotEvent } from "@/lib/analytics/tracker";

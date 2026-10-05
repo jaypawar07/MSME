@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { formatINR, InvoiceCalculations } from "@/lib/msme-calculator";
+import { formatINR, type InvoiceCalculations } from "@/lib/msme-calculator";
 import { 
   AlertTriangle, 
   CheckCircle2, 

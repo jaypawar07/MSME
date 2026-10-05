@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { 
   parseInvoiceCSV, 
-  ParsedInvoiceRow, 
-  CSVParseResult, 
+  type ParsedInvoiceRow, 
+  type CSVParseResult, 
   SAMPLE_CSV_TEMPLATES 
 } from "@/lib/csv/invoice-csv-parser";
 

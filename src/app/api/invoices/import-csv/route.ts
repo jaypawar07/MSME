@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseInvoiceCSV, ParsedInvoiceRow } from "@/lib/csv/invoice-csv-parser";
+import { parseInvoiceCSV, type ParsedInvoiceRow } from "@/lib/csv/invoice-csv-parser";
 
 export async function POST(req: Request) {
   try {

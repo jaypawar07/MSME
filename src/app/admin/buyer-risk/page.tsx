@@ -17,7 +17,7 @@ import {
   Info
 } from "lucide-react";
 import Link from "next/link";
-import { BuyerRiskDataset } from "@/lib/analytics/buyer-risk-aggregator";
+import { type BuyerRiskDataset } from "@/lib/analytics/buyer-risk-aggregator";
 
 export default function BuyerRiskAdminPage() {
   const [dataset, setDataset] = useState<BuyerRiskDataset | null>(null);

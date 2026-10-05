@@ -19,7 +19,7 @@ import {
   Edit2
 } from "lucide-react";
 import { format } from "date-fns";
-import { InvoiceCalculations, formatINR } from "@/lib/msme-calculator";
+import { type InvoiceCalculations, formatINR } from "@/lib/msme-calculator";
 
 interface InvoiceDetailModalProps {
   isOpen: boolean;

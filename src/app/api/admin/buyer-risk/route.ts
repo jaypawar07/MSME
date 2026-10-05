@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { aggregateBuyerPaymentRisk } from "@/lib/analytics/buyer-risk-aggregator";
 
+// Per-user data: never prerender at build time.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);

@@ -16,7 +16,7 @@ import {
   SlidersHorizontal,
   Info
 } from "lucide-react";
-import { BuyerRiskDataset, BuyerRiskProfile } from "@/lib/analytics/buyer-risk-aggregator";
+import { type BuyerRiskDataset, type BuyerRiskProfile } from "@/lib/analytics/buyer-risk-aggregator";
 
 interface BuyerRiskModalProps {
   isOpen: boolean;

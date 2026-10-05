@@ -21,7 +21,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
-import { InvoiceCalculations, formatINR } from "@/lib/msme-calculator";
+import { type InvoiceCalculations, formatINR } from "@/lib/msme-calculator";
 
 interface Reminder {
   id: string;

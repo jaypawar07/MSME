@@ -75,11 +75,40 @@ export function getPendingMilestones(
   }
 
   const sentSet = new Set(sentMilestones.map((m) => m.toUpperCase()));
-
-  // Filter milestones where overdue threshold has been reached and not yet sent
-  return AUTO_REMINDER_MILESTONES.filter(
-    (m) => daysOverdue >= m.thresholdDays && !sentSet.has(m.key)
+  const highestSentThreshold = Math.max(
+    0,
+    ...AUTO_REMINDER_MILESTONES.filter((m) => sentSet.has(m.key)).map((m) => m.thresholdDays)
   );
+
+  // Only the latest reached milestone is sent. Earlier ones are superseded, so an
+  // invoice that is already 65 days overdue gets one Day 60 notice, not four.
+  const reached = AUTO_REMINDER_MILESTONES.filter(
+    (m) => daysOverdue >= m.thresholdDays && m.thresholdDays > highestSentThreshold
+  );
+  return reached.length > 0 ? [reached[reached.length - 1]] : [];
+}
+
+const MILESTONE_TAG_PATTERNS: Array<[MilestoneKey, RegExp]> = AUTO_REMINDER_MILESTONES.map((m) => [
+  m.key,
+  new RegExp(`\\b(${m.key}|Day ${m.thresholdDays})\\b`),
+]);
+
+/**
+ * Milestones already delivered, read from reminder history. Failed deliveries
+ * don't count, so they're retried on the next run.
+ */
+export function getSentMilestones(
+  existingReminders: Array<{ tone: string; subject?: string | null; message?: string; status?: string | null }>
+): MilestoneKey[] {
+  const sent = new Set<MilestoneKey>();
+  for (const r of existingReminders) {
+    if (r.status === "FAILED") continue;
+    const combined = `${r.tone} ${r.subject || ""} ${r.message || ""}`;
+    for (const [key, pattern] of MILESTONE_TAG_PATTERNS) {
+      if (pattern.test(combined)) sent.add(key);
+    }
+  }
+  return Array.from(sent);
 }
 
 /**
@@ -98,7 +127,7 @@ export function evaluateInvoiceForAutoReminders(
     status: string;
     user?: { name: string; businessName?: string | null; udyamNumber?: string | null };
   },
-  existingReminders: Array<{ tone: string; subject?: string | null; message?: string }>,
+  existingReminders: Array<{ tone: string; subject?: string | null; message?: string; status?: string | null }>,
   asOfDate: Date = new Date()
 ): PlannedMilestoneReminder[] {
   const calcs = calculateMSMEInterest(
@@ -109,16 +138,7 @@ export function evaluateInvoiceForAutoReminders(
     asOfDate
   );
 
-  // Extract sent milestones from prior reminder records
-  const sentMilestones: string[] = [];
-  existingReminders.forEach((r) => {
-    const combined = `${r.tone} ${r.subject || ""} ${r.message || ""}`;
-    if (combined.includes("DAY_1") || combined.includes("Day 1")) sentMilestones.push("DAY_1");
-    if (combined.includes("DAY_30") || combined.includes("Day 30")) sentMilestones.push("DAY_30");
-    if (combined.includes("DAY_45") || combined.includes("Day 45")) sentMilestones.push("DAY_45");
-    if (combined.includes("DAY_60") || combined.includes("Day 60")) sentMilestones.push("DAY_60");
-  });
-
+  const sentMilestones = getSentMilestones(existingReminders);
   const dueMilestones = getPendingMilestones(calcs.daysOverdue, sentMilestones, invoice.status);
   if (dueMilestones.length === 0) return [];
 
@@ -180,7 +200,7 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
     include: {
       user: true,
       reminders: {
-        select: { tone: true, subject: true, message: true, sentAt: true },
+        select: { tone: true, subject: true, message: true, status: true, sentAt: true },
       },
     },
   });

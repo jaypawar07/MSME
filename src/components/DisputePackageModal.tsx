@@ -19,7 +19,7 @@ import {
   Download
 } from "lucide-react";
 import { format } from "date-fns";
-import { DisputePackageData } from "@/lib/dispute/dispute-package-generator";
+import { type DisputePackageData } from "@/lib/dispute/dispute-package-generator";
 
 interface DisputePackageModalProps {
   isOpen: boolean;

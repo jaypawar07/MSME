@@ -5,6 +5,9 @@ import prisma from "@/lib/prisma";
 import { calculateMSMEInterest } from "@/lib/msme-calculator";
 import { format } from "date-fns";
 
+// Per-user data: never prerender at build time.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

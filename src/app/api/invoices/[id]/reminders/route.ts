@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getNotificationSender, NotificationChannel } from "@/lib/notifications/notification-sender";
+import { getNotificationSender, type NotificationChannel } from "@/lib/notifications/notification-sender";
 import { calculateMSMEInterest } from "@/lib/msme-calculator";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {

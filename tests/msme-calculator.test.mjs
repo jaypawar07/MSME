@@ -1,57 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, subDays } from "date-fns";
-
-// Reusable logic under test
-const MSME_STATUTORY_ANNUAL_RATE = 16.5; // 16.5% annually (3x RBI Bank rate of 5.5%)
-const DEFAULT_TERMS_DAYS = 45;
-
-function calculateMSMEInterest(
-  invoiceDateInput,
-  amount,
-  paymentTermsDays = DEFAULT_TERMS_DAYS,
-  status = "PENDING",
-  asOfDate = new Date()
-) {
-  const invDate = typeof invoiceDateInput === "string" ? new Date(invoiceDateInput) : invoiceDateInput;
-  const terms = Math.min(Math.max(paymentTermsDays || DEFAULT_TERMS_DAYS, 1), 45); // Max 45 days under Section 15
-  const dueDate = addDays(invDate, terms);
-  
-  const daysElapsed = Math.max(0, Math.round((asOfDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24)));
-  const daysRemaining = Math.round((dueDate.getTime() - asOfDate.getTime()) / (1000 * 60 * 60 * 24));
-  const daysOverdue = Math.max(0, Math.round((asOfDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)));
-  
-  const isOverdue = daysOverdue > 0 || status === "OVERDUE";
-  const isStatutoryDelayed = daysElapsed > 45 || daysOverdue > 0;
-
-  let interestOwed = 0;
-  const annualRate = MSME_STATUTORY_ANNUAL_RATE / 100;
-  const monthlyRate = annualRate / 12;
-
-  if (status !== "PAID" && isOverdue && daysOverdue > 0) {
-    const avgDaysInMonth = 30.4167; // 365 / 12
-    const totalMonths = daysOverdue / avgDaysInMonth;
-    const compoundMultiplier = Math.pow(1 + monthlyRate, totalMonths);
-    interestOwed = amount * (compoundMultiplier - 1);
-  }
-
-  interestOwed = Math.round(interestOwed * 100) / 100;
-  const totalClaimAmount = Math.round((amount + interestOwed) * 100) / 100;
-
-  return {
-    invoiceDate: invDate,
-    dueDate,
-    daysElapsed,
-    daysRemaining,
-    daysOverdue,
-    isOverdue,
-    interestRateAnnual: MSME_STATUTORY_ANNUAL_RATE,
-    interestRateMonthly: Number((monthlyRate * 100).toFixed(3)),
-    interestOwed,
-    totalClaimAmount,
-    isStatutoryDelayed,
-  };
-}
+import { subDays } from "date-fns";
+import { calculateMSMEInterest, formatINR } from "../src/lib/msme-calculator.ts";
 
 test("MSME Interest Calculator - Within Terms (0 Overdue Days)", () => {
   const asOf = new Date("2024-06-01T00:00:00Z");
@@ -112,4 +62,26 @@ test("MSME Interest Calculator - Paid Status Excludes Penal Interest", () => {
 
   assert.equal(result.interestOwed, 0, "Paid invoice must not accrue interest");
   assert.equal(result.totalClaimAmount, 500000);
+});
+
+test("MSME Interest Calculator - Status badge and urgency label", () => {
+  const asOf = new Date("2024-06-01T00:00:00Z");
+  const at = (daysAgo, status = "PENDING") => calculateMSMEInterest(subDays(asOf, daysAgo), 100000, 45, status, asOf);
+
+  assert.deepEqual([at(10).statusBadgeColor, at(10).urgencyLabel], ["green", "35d left (Safe)"]);
+  assert.deepEqual([at(40).statusBadgeColor, at(40).urgencyLabel], ["yellow", "Due in 5d"]);
+  assert.deepEqual([at(50).statusBadgeColor, at(50).urgencyLabel], ["red", "5d Overdue"]);
+  assert.equal(at(50, "PAID").statusBadgeColor, "emerald");
+  assert.equal(at(50, "DISPUTED").statusBadgeColor, "purple");
+});
+
+test("MSME Interest Calculator - Accepts ISO date strings", () => {
+  const asOf = new Date(2024, 5, 1, 12); // local noon, same zone parseISO uses
+  const result = calculateMSMEInterest("2024-04-01", 100000, 45, "PENDING", asOf);
+  assert.equal(result.daysElapsed, 61);
+  assert.equal(result.daysOverdue, 16);
+});
+
+test("formatINR - Indian digit grouping", () => {
+  assert.equal(formatINR(1420000), "₹14,20,000.00");
 });

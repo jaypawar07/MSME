@@ -1,103 +1,112 @@
-import test from "node:test";
+import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
+import { setTestSession } from "./stubs/next-auth.mjs";
+import { resetTestDatabase } from "./helpers/test-db.mjs";
 
 /**
- * Multi-Tenant Isolation Simulator and Security Audit
- * Verifies strict tenant boundaries between distinct business owner accounts.
+ * Multi-tenant security audit against the real API route handlers and a real
+ * (throwaway) SQLite database: supplier B must never read, change or act on
+ * supplier A's invoices.
  */
 
-class MockMultiTenantDB {
-  constructor() {
-    this.invoices = [];
-    this.reminders = [];
-    this.leads = [];
-  }
+let prisma, invoicesRoute, invoiceRoute, remindersRoute, disputeRoute, leadsRoute;
+let userA, userB, invoiceOfA;
 
-  createInvoice(userId, data) {
-    const inv = { id: `inv_${Date.now()}_${Math.random()}`, userId, ...data };
-    this.invoices.push(inv);
-    return inv;
-  }
+const asUser = (user) => setTestSession({ user: { id: user.id, email: user.email, name: user.name, role: "OWNER" } });
+const params = (id) => ({ params: { id } });
+const json = (body) => new Request("http://test.local/api", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+const get = () => new Request("http://test.local/api");
 
-  findManyInvoices(userId, filter = {}) {
-    return this.invoices.filter((i) => i.userId === userId);
-  }
+before(async () => {
+  resetTestDatabase();
+  ({ prisma } = await import("../src/lib/prisma.ts"));
+  invoicesRoute = await import("../src/app/api/invoices/route.ts");
+  invoiceRoute = await import("../src/app/api/invoices/[id]/route.ts");
+  remindersRoute = await import("../src/app/api/invoices/[id]/reminders/route.ts");
+  disputeRoute = await import("../src/app/api/invoices/[id]/dispute-package/route.ts");
+  leadsRoute = await import("../src/app/api/financing/leads/route.ts");
 
-  findInvoiceById(invoiceId, userId) {
-    const inv = this.invoices.find((i) => i.id === invoiceId && i.userId === userId);
-    return inv || null;
-  }
+  userA = await prisma.user.create({ data: { email: "a@supplier.test", name: "Supplier A", passwordHash: "x" } });
+  userB = await prisma.user.create({ data: { email: "b@supplier.test", name: "Supplier B", passwordHash: "x" } });
 
-  updateInvoice(invoiceId, userId, updateData) {
-    const invIndex = this.invoices.findIndex((i) => i.id === invoiceId && i.userId === userId);
-    if (invIndex === -1) return null; // 404 unauthorized/not found
-    this.invoices[invIndex] = { ...this.invoices[invIndex], ...updateData };
-    return this.invoices[invIndex];
-  }
-
-  deleteInvoice(invoiceId, userId) {
-    const invIndex = this.invoices.findIndex((i) => i.id === invoiceId && i.userId === userId);
-    if (invIndex === -1) return false;
-    this.invoices.splice(invIndex, 1);
-    return true;
-  }
-}
-
-test("Multi-Tenant Isolation - User A cannot see User B's invoices", () => {
-  const db = new MockMultiTenantDB();
-
-  // Tenant A creates 2 invoices
-  db.createInvoice("user_tenant_A", {
+  asUser(userA);
+  const res = await invoicesRoute.POST(json({
+    buyerName: "Buyer Alpha",
+    buyerEmail: "ap@alpha.test",
     invoiceNumber: "INV-A-101",
-    buyerName: "Buyer Alpha",
     amount: 500000,
-  });
-  db.createInvoice("user_tenant_A", {
-    invoiceNumber: "INV-A-102",
-    buyerName: "Buyer Alpha",
-    amount: 250000,
-  });
-
-  // Tenant B creates 1 invoice
-  db.createInvoice("user_tenant_B", {
-    invoiceNumber: "INV-B-201",
-    buyerName: "Buyer Beta",
-    amount: 800000,
-  });
-
-  const tenantAInvoices = db.findManyInvoices("user_tenant_A");
-  const tenantBInvoices = db.findManyInvoices("user_tenant_B");
-
-  assert.equal(tenantAInvoices.length, 2);
-  assert.equal(tenantBInvoices.length, 1);
-
-  // Verify no cross-tenant leakage
-  assert.ok(tenantAInvoices.every((i) => i.userId === "user_tenant_A"));
-  assert.ok(tenantBInvoices.every((i) => i.userId === "user_tenant_B"));
-  assert.ok(!tenantAInvoices.some((i) => i.invoiceNumber === "INV-B-201"));
+    invoiceDate: "2024-01-01",
+    paymentTermsDays: 45,
+  }));
+  assert.ok(res.status < 300, `Supplier A should be able to create an invoice (got ${res.status})`);
+  invoiceOfA = await prisma.invoice.findFirstOrThrow({ where: { invoiceNumber: "INV-A-101" } });
 });
 
-test("Multi-Tenant Isolation - User B cannot read, update, or delete User A's invoice", () => {
-  const db = new MockMultiTenantDB();
+after(async () => {
+  setTestSession(null);
+  await prisma?.$disconnect();
+});
 
-  const invA = db.createInvoice("user_tenant_A", {
-    invoiceNumber: "CONFIDENTIAL-INV-A-001",
-    buyerName: "Secret Client",
-    amount: 1200000,
-    status: "PENDING",
-  });
+test("Multi-Tenant Isolation - Unauthenticated requests are rejected", async () => {
+  setTestSession(null);
+  assert.equal((await invoicesRoute.GET(get())).status, 401);
+  assert.equal((await invoiceRoute.GET(get(), params(invoiceOfA.id))).status, 401);
+});
 
-  // User B tries to read User A's invoice by ID
-  const readAttempt = db.findInvoiceById(invA.id, "user_tenant_B");
-  assert.equal(readAttempt, null, "User B must not be able to read User A's invoice");
+test("Multi-Tenant Isolation - Owner can read their own invoice", async () => {
+  asUser(userA);
+  assert.equal((await invoiceRoute.GET(get(), params(invoiceOfA.id))).status, 200);
+  const list = JSON.stringify(await (await invoicesRoute.GET(get())).json());
+  assert.ok(list.includes("INV-A-101"));
+});
 
-  // User B tries to update User A's invoice status to PAID
-  const updateAttempt = db.updateInvoice(invA.id, "user_tenant_B", { status: "PAID" });
-  assert.equal(updateAttempt, null, "User B must not be able to modify User A's invoice");
-  assert.equal(db.findInvoiceById(invA.id, "user_tenant_A").status, "PENDING");
+test("Multi-Tenant Isolation - User B's invoice list excludes User A's invoices", async () => {
+  asUser(userB);
+  const list = JSON.stringify(await (await invoicesRoute.GET(get())).json());
+  assert.ok(!list.includes("INV-A-101"), "Supplier B must not see Supplier A's invoice");
+});
 
-  // User B tries to delete User A's invoice
-  const deleteAttempt = db.deleteInvoice(invA.id, "user_tenant_B");
-  assert.equal(deleteAttempt, false, "User B must not be able to delete User A's invoice");
-  assert.ok(db.findInvoiceById(invA.id, "user_tenant_A") !== null);
+test("Multi-Tenant Isolation - User B cannot read, update, or delete User A's invoice", async () => {
+  asUser(userB);
+  assert.equal((await invoiceRoute.GET(get(), params(invoiceOfA.id))).status, 404);
+
+  const patch = new Request("http://test.local/api", { method: "PATCH", body: JSON.stringify({ status: "PAID", amount: 1 }) });
+  assert.equal((await invoiceRoute.PATCH(patch, params(invoiceOfA.id))).status, 404);
+
+  assert.equal((await invoiceRoute.DELETE(get(), params(invoiceOfA.id))).status, 404);
+
+  const stored = await prisma.invoice.findUnique({ where: { id: invoiceOfA.id } });
+  assert.equal(stored.status, "PENDING", "Invoice must be unchanged");
+  assert.equal(stored.amount, 500000, "Invoice must be unchanged");
+});
+
+test("Multi-Tenant Isolation - User B cannot read or send reminders on User A's invoice", async () => {
+  asUser(userB);
+  assert.equal((await remindersRoute.GET(get(), params(invoiceOfA.id))).status, 404);
+  const res = await remindersRoute.POST(json({ channel: "EMAIL", tone: "FORMAL", message: "Pay now" }), params(invoiceOfA.id));
+  assert.equal(res.status, 404);
+  assert.equal(await prisma.reminder.count({ where: { invoiceId: invoiceOfA.id } }), 0);
+});
+
+test("Multi-Tenant Isolation - User B cannot generate a dispute package for User A's invoice", async () => {
+  asUser(userB);
+  assert.equal((await disputeRoute.GET(get(), params(invoiceOfA.id))).status, 404);
+});
+
+test("Multi-Tenant Isolation - User B cannot raise financing against User A's invoice", async () => {
+  asUser(userB);
+  const res = await leadsRoute.POST(json({
+    invoiceId: invoiceOfA.id,
+    contactName: "Mallory",
+    contactPhone: "9999999999",
+    contactEmail: "m@b.test",
+    requestedAmount: 400000,
+    consentGiven: true,
+  }));
+  assert.equal(res.status, 404);
+  assert.equal(await prisma.financingLead.count(), 0);
 });

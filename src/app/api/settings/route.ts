@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { can, computeEffectiveRate, isValidRate, isValidTimeHHMM, RATE_LIMITS } from "@/lib/settings/policy";
 
 export async function GET(req: NextRequest) {
   try {
@@ -67,11 +68,9 @@ export async function PATCH(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const userRole = (session.user as any).role || "OWNER";
-
-    if (userRole === "STAFF") {
+    if (!can((session.user as any).role, "editSettings")) {
       return NextResponse.json(
-        { error: "Access Denied: Staff accounts cannot modify company settings." },
+        { error: "Access Denied: Only the Company Owner can modify company settings." },
         { status: 403 }
       );
     }
@@ -88,7 +87,6 @@ export async function PATCH(req: NextRequest) {
       quietHoursEnd,
       rbiBaseRate,
       statutoryMultiplier,
-      effectiveAnnualRate,
       rateEffectiveDate,
       rateNotes,
       tallyStatus,
@@ -105,8 +103,28 @@ export async function PATCH(req: NextRequest) {
       where: { userId },
     });
 
+    for (const [field, value] of [["quietHoursStart", quietHoursStart], ["quietHoursEnd", quietHoursEnd]] as const) {
+      if (value !== undefined && !isValidTimeHHMM(value)) {
+        return NextResponse.json({ error: `${field} must be a time in HH:MM format` }, { status: 400 });
+      }
+    }
+    if (rbiBaseRate !== undefined && !isValidRate(rbiBaseRate, RATE_LIMITS.rbiBaseRate)) {
+      return NextResponse.json({ error: "RBI Bank Rate must be between 0.01% and 25%" }, { status: 400 });
+    }
+    if (statutoryMultiplier !== undefined && !isValidRate(statutoryMultiplier, RATE_LIMITS.statutoryMultiplier)) {
+      return NextResponse.json({ error: "Statutory multiplier must be between 1 and 5" }, { status: 400 });
+    }
+
+    // The effective rate is always derived on the server; a client-sent value is ignored.
     const oldRate = currentSettings?.effectiveAnnualRate ?? 16.5;
-    const newRate = typeof effectiveAnnualRate === "number" ? effectiveAnnualRate : oldRate;
+    const effectiveAnnualRate =
+      rbiBaseRate !== undefined || statutoryMultiplier !== undefined
+        ? computeEffectiveRate(
+            rbiBaseRate ?? currentSettings?.rbiBaseRate ?? 5.5,
+            statutoryMultiplier ?? currentSettings?.statutoryMultiplier ?? 3.0
+          )
+        : undefined;
+    const newRate = effectiveAnnualRate ?? oldRate;
 
     // If rate changed, log audit record
     if (Math.abs(oldRate - newRate) > 0.001) {

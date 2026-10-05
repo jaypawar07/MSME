@@ -17,8 +17,8 @@ import {
   Info
 } from "lucide-react";
 import { 
-  GSTReconciliationResult, 
-  GSTDiffItem, 
+  type GSTReconciliationResult, 
+  type GSTDiffItem, 
   SAMPLE_GSTR2B_CSV, 
   parseGSTRCsv, 
   reconcileInvoicesWithGSTR 

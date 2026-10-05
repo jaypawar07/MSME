@@ -6,7 +6,8 @@ Next.js 14 App Router · Prisma (SQLite locally, Postgres in prod) · NextAuth (
 ## Commands
 - `npm run dev`: dev server on http://localhost:3000 (demo login: see README)
 - `npm run check`: **type check + all tests. Must pass before any task is called done.**
-- `npm test`: tests only (Node `node:test`, runs `.ts` from `src/` via `tests/alias-loader.mjs`)
+- `npm test`: tests only. Node `node:test` runs `.ts` from `src/` directly. `tests/setup.mjs` forces `DATABASE_URL=file:./test.db` (never dev data) and loads `tests/alias-loader.mjs` (`@/` alias + `next-auth` stubs).
+  - Route tests: `setTestSession({ user: { id, role } })` from `tests/stubs/next-auth.mjs`, `resetTestDatabase()` from `tests/helpers/test-db.mjs`, then call the exported `GET`/`POST` handlers directly. See `tests/multi-tenant-isolation.test.mjs`.
 - `npx prisma db push && node prisma/seed.js`: reset local DB schema / seed data
 
 ## Workflow (every session)

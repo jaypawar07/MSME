@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { can } from "@/lib/settings/policy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,9 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const userRole = (session.user as any).role || "OWNER";
-
-    if (userRole !== "OWNER" && userRole !== "ADMIN") {
+    if (!can((session.user as any).role, "manageTeam")) {
       return NextResponse.json(
         { error: "Only the Company Owner can invite team members." },
         { status: 403 }
@@ -64,9 +63,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const userRole = (session.user as any).role || "OWNER";
-
-    if (userRole !== "OWNER" && userRole !== "ADMIN") {
+    if (!can((session.user as any).role, "manageTeam")) {
       return NextResponse.json(
         { error: "Only the Company Owner can remove team members." },
         { status: 403 }
