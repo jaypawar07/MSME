@@ -28,9 +28,18 @@ export async function POST(req: Request) {
     const userId = (session.user as any).id;
     const result = await runAutoReminderScheduler(userId);
 
+    const quiet = result.skipped.filter((s) => s.reason === "QUIET_HOURS").length;
+    const noChannel = result.skipped.filter((s) => s.reason === "NO_ENABLED_CHANNEL").length;
+    const notes = [
+      quiet > 0 && `${quiet} held back for quiet hours (they'll go out after quiet hours end)`,
+      noChannel > 0 && `${noChannel} skipped: no buyer email/phone for the channels enabled in Settings`,
+    ].filter(Boolean);
+
     return NextResponse.json({
       success: true,
-      message: `Evaluated ${result.evaluatedInvoicesCount} invoices. Automatically dispatched ${result.dispatchedRemindersCount} due milestone reminders.`,
+      message:
+        `Evaluated ${result.evaluatedInvoicesCount} invoices. Automatically dispatched ${result.dispatchedRemindersCount} due milestone reminders.` +
+        (notes.length > 0 ? ` ${notes.join("; ")}.` : ""),
       result,
     });
   } catch (error: any) {

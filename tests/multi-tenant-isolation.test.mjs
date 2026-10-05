@@ -1,4 +1,4 @@
-import test, { before, after } from "node:test";
+import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { setTestSession } from "./stubs/next-auth.mjs";
 import { resetTestDatabase } from "./helpers/test-db.mjs";
@@ -9,6 +9,7 @@ import { resetTestDatabase } from "./helpers/test-db.mjs";
  * supplier A's invoices.
  */
 
+describe("Multi-Tenant Isolation - real API routes", () => {
 let prisma, invoicesRoute, invoiceRoute, remindersRoute, disputeRoute, leadsRoute;
 let userA, userB, invoiceOfA;
 
@@ -109,4 +110,5 @@ test("Multi-Tenant Isolation - User B cannot raise financing against User A's in
   }));
   assert.equal(res.status, 404);
   assert.equal(await prisma.financingLead.count(), 0);
+});
 });

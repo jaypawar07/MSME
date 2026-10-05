@@ -12,7 +12,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | Area | State |
 | :--- | :--- |
 | Type check (`tsc --noEmit`) | ✅ clean |
-| Test suite (`npm test`) | ✅ 44 / 44 passing (was ❌ crashing before 2026-10-05) |
+| Test suite (`npm test`) | ✅ 56 / 56 passing (was ❌ crashing before 2026-10-05) |
 | Tests that exercise real `src/` code | ✅ 8 of 8 files; multi-tenant test calls real API routes on a throwaway `prisma/test.db` |
 | Production build (`next build`) | ✅ clean, no warnings |
 | Version control | ✅ git, `main` tracks github.com/jaypawar07/MSME |
@@ -31,9 +31,11 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | B8 | Low | `next dev` logs "Failed to patch lockfile … reading 'os'". Harmless; fix by reinstalling `next` / refreshing the lockfile. | `package-lock.json` |
 | B9 | Low | No `ADMIN` user is seeded, so `/admin/buyer-risk` only shows the non-admin view locally. | `prisma/seed.js` |
 | ~~B4~~ | ✅ fixed 2026-10-05 | 4 test files re-implemented logic instead of testing it. All now import real code. | `tests/` |
-| B10 | **High (product)** | Settings are saved but **never used**: the Day 1/30/45/60 switches, quiet hours, WhatsApp/Email toggles (scheduler ignores them) and the custom interest rate (calculator hard-codes 16.5%). Users think they've changed behaviour when they haven't. | `src/lib/reminders/auto-scheduler.ts`, `src/lib/msme-calculator.ts` |
+| B10a | ✅ fixed 2026-10-05 | Auto-reminders ignored Settings. Now follow the Day 1/30/45/60 switches, quiet hours (India time) and the Email/WhatsApp toggles. | `auto-scheduler.ts` |
+| B10b | **High (product/legal)** | Custom interest rate in Settings is still ignored: calculator, notices, dispute package and screens hard-code 16.5% (~30 places). Must change together so a notice never quotes one rate while charging another. | `msme-calculator.ts`, `reminder-templates.ts`, `dispute-package-generator.ts`, components |
 | B11 | Low (docs) | README's interest formula (whole months compounded + simple interest on leftover days) differs from the code (fractional-month compounding). Confirm which is legally correct, then align. | `README.md`, `src/lib/msme-calculator.ts` |
-| B12 | Medium | Auto-scheduler always uses Email if the buyer has an email address, even if Email is disabled in Settings (part of B10). | `auto-scheduler.ts` |
+| ~~B12~~ | ✅ fixed 2026-10-05 | Scheduler used Email even when disabled, and sent to a made-up `accounts@buyer.com` when the buyer had no contact. Now skips with a reason shown in the widget. | `auto-scheduler.ts` |
+| B13 | Low | Manual "Send Reminder" doesn't check quiet hours (deliberate for now: it's an explicit user action). Revisit when real WhatsApp sending is live. | `api/invoices/[id]/reminders` |
 | B5 | Low | `session.user as any` repeated in every route. Add a typed `next-auth.d.ts` module augmentation + a `requireUser()` helper. | `src/app/api/**` |
 | B6 | Low | Node warns `MODULE_TYPELESS_PACKAGE_JSON` during tests (harmless, slower). | `package.json` / tests |
 
@@ -42,8 +44,8 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | # | Feature | Status |
 | :- | :- | :- |
 | F1 | OCR invoice extraction (buyer, GSTIN, amount, date) | 🟡 stub exists (`src/lib/ocr/invoice-ocr.ts`, `/api/ocr`) |
-| F2 | Real WhatsApp / Email delivery (Meta Cloud API / SMTP) | 🟡 sender abstraction exists, mock only (`src/lib/notifications/`) |
-| F3 | Scheduled auto-reminders (cron) | 🟡 scheduler logic fixed + tested; no cron trigger; ignores Settings (B10) |
+| F2 | Real WhatsApp / Email delivery (Meta Cloud API / Resend) | 🟡 implemented in `src/lib/notifications/`, active only when `RESEND_API_KEY` / `WHATSAPP_*` env vars are set; untested against the real APIs |
+| F3 | Scheduled auto-reminders (cron) | 🟡 scheduler fixed, honours Settings, tested end-to-end on test DB; **no cron trigger yet** (runs only via the widget's button) |
 | F4 | Tally Prime / Zoho Books sync | 🟡 CSV import only |
 | F5 | MSME Samadhaan / MSEFC petition PDF | 🟡 dispute package HTML exists |
 | F6 | UPI QR / payment links in reminders | ⬜ not started |
@@ -75,6 +77,13 @@ Legend: ⬜ not started · 🟡 partial · ✅ done
 - **Tests:** rewrote calculator, scheduler, settings and multi-tenant tests to import real code (27 → 44 tests). Added `tests/setup.mjs` (forces `DATABASE_URL=file:./test.db` so tests can never touch dev data), `tests/helpers/test-db.mjs`, and next-auth stubs. Mutation-checked: removing the `userId` filter from `GET /api/invoices/[id]` makes the isolation test fail.
 - **Verified:** `npm run check` 44/44, tests pass in UTC, Los Angeles, Kolkata and UTC+14 timezones, `next build` clean, dev-server smoke test of settings validation (negative rate → 400, bad time → 400, forged 99% rate → stored 16.5%).
 
+### 2026-10-05 (session 3): Settings now control automatic reminders
+- **Feature:** auto-reminders honour Company Settings: Day 1/30/45/60 switches (latest *enabled* milestone is used), quiet hours (in IST, held back and sent on the first run after), and Email/WhatsApp toggles (Email first, WhatsApp fallback).
+- **Fixed:** never sends to a made-up `accounts@buyer.com` when the buyer has no contact; skipped invoices are reported with a reason in the widget message.
+- **Safety:** `tests/setup.mjs` strips email/WhatsApp API keys; the runner test asserts they're absent so tests can never message a real buyer. DB test files scope their hooks with `describe()` so resets can't collide.
+- **Tests:** 44 → 56. New `tests/auto-reminder-runner.test.mjs` runs the real scheduler on the test DB. Mutation-checked: disabling the quiet-hours check or the milestone switches turns tests red.
+- **Verified:** `npm run check` 56/56, `next build` compiles. No dev-server run, to avoid creating reminder rows in the dev DB (covered by the runner test).
+
 ---
 
 ## 🧠 Lessons learned (mistakes → rules)
@@ -92,3 +101,6 @@ Each time a mistake is found, add a line here so it isn't repeated.
 9. **Dates in tests: don't mix UTC instants with local-date strings.** That fails in timezones west of UTC. Run date tests with `TZ=America/Los_Angeles` too. *(2026-10-05)*
 10. **When code and UI text disagree, the documented rule wins unless told otherwise.** The settings route let Accountants edit settings although the UI says they can't. *(2026-10-05)*
 11. **The test loader must only rewrite imports from our own files, never `node_modules`.** *(2026-10-05)*
+12. **If the explanation of *why* something was skipped needs re-running the logic with tweaked inputs, restructure instead.** Pull out the question ("which milestone is due?") as its own function. *(2026-10-05)*
+13. **A test that passes on the first run hasn't proven anything yet.** Mutate the code and watch it fail. *(2026-10-05)*
+14. **Tests must not be able to reach real external services.** Strip API keys in setup and assert they're absent. *(2026-10-05)*

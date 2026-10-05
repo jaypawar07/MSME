@@ -9,6 +9,7 @@ import { calculateMSMEInterest, type InvoiceCalculations } from "@/lib/msme-calc
 import { REMINDER_TEMPLATES, type ReminderTemplate } from "@/lib/reminder-templates";
 import { getNotificationSender, type NotificationChannel } from "@/lib/notifications/notification-sender";
 import { prisma } from "@/lib/prisma";
+import { isQuietHours, istTimeHHMM } from "@/lib/settings/policy";
 
 export type MilestoneKey = "DAY_1" | "DAY_30" | "DAY_45" | "DAY_60";
 
@@ -51,6 +52,64 @@ export const AUTO_REMINDER_MILESTONES: ScheduleMilestone[] = [
   },
 ];
 
+/** The CompanySettings fields that control automatic reminders. */
+export interface ReminderPreferences {
+  enableEmail: boolean;
+  enableWhatsApp: boolean;
+  sendDay1: boolean;
+  sendDay30: boolean;
+  sendDay45: boolean;
+  sendDay60: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+}
+
+// Mirrors the CompanySettings defaults in prisma/schema.prisma
+export const DEFAULT_REMINDER_PREFERENCES: ReminderPreferences = {
+  enableEmail: true,
+  enableWhatsApp: true,
+  sendDay1: true,
+  sendDay30: true,
+  sendDay45: true,
+  sendDay60: true,
+  quietHoursStart: "21:00",
+  quietHoursEnd: "08:00",
+};
+
+/** Users who never opened Settings have no CompanySettings row; they get the defaults. */
+export function toReminderPreferences(settings: Partial<ReminderPreferences> | null | undefined): ReminderPreferences {
+  const prefs = { ...DEFAULT_REMINDER_PREFERENCES };
+  if (!settings) return prefs;
+  for (const key of Object.keys(prefs) as Array<keyof ReminderPreferences>) {
+    const value = settings[key];
+    if (value !== undefined && value !== null) (prefs as any)[key] = value;
+  }
+  return prefs;
+}
+
+function milestoneSwitches(prefs: ReminderPreferences): Partial<Record<MilestoneKey, boolean>> {
+  return { DAY_1: prefs.sendDay1, DAY_30: prefs.sendDay30, DAY_45: prefs.sendDay45, DAY_60: prefs.sendDay60 };
+}
+
+export function isInQuietHours(prefs: ReminderPreferences, at: Date = new Date()): boolean {
+  return isQuietHours(istTimeHHMM(at), prefs.quietHoursStart, prefs.quietHoursEnd);
+}
+
+/**
+ * Email if enabled and the buyer has an address, otherwise WhatsApp if enabled and
+ * the buyer has a phone. Null when neither is possible: never guess a recipient.
+ */
+export function chooseDeliveryChannel(
+  buyer: { buyerEmail?: string | null; buyerPhone?: string | null },
+  prefs: ReminderPreferences
+): { channel: NotificationChannel; recipient: string } | null {
+  const email = buyer.buyerEmail?.trim();
+  const phone = buyer.buyerPhone?.trim();
+  if (prefs.enableEmail && email) return { channel: "EMAIL", recipient: email };
+  if (prefs.enableWhatsApp && phone) return { channel: "WHATSAPP", recipient: phone };
+  return null;
+}
+
 export interface PlannedMilestoneReminder {
   milestone: MilestoneKey;
   thresholdDays: number;
@@ -68,7 +127,8 @@ export interface PlannedMilestoneReminder {
 export function getPendingMilestones(
   daysOverdue: number,
   sentMilestones: string[],
-  invoiceStatus: string = "PENDING"
+  invoiceStatus: string = "PENDING",
+  enabled: Partial<Record<MilestoneKey, boolean>> = {}
 ): ScheduleMilestone[] {
   if (invoiceStatus === "PAID" || invoiceStatus === "DISPUTED" || daysOverdue < 1) {
     return [];
@@ -82,8 +142,9 @@ export function getPendingMilestones(
 
   // Only the latest reached milestone is sent. Earlier ones are superseded, so an
   // invoice that is already 65 days overdue gets one Day 60 notice, not four.
+  // Milestones switched off in Settings are skipped entirely.
   const reached = AUTO_REMINDER_MILESTONES.filter(
-    (m) => daysOverdue >= m.thresholdDays && m.thresholdDays > highestSentThreshold
+    (m) => enabled[m.key] !== false && daysOverdue >= m.thresholdDays && m.thresholdDays > highestSentThreshold
   );
   return reached.length > 0 ? [reached[reached.length - 1]] : [];
 }
@@ -111,6 +172,25 @@ export function getSentMilestones(
   return Array.from(sent);
 }
 
+type ReminderHistory = Array<{ tone: string; subject?: string | null; message?: string; status?: string | null }>;
+
+/** The milestone (at most one) this invoice is due for, honouring the Day 1/30/45/60 switches. */
+export function getDueMilestones(
+  invoice: { invoiceDate: Date | string; amount: number; paymentTermsDays: number; status: string },
+  existingReminders: ReminderHistory,
+  asOfDate: Date,
+  prefs: ReminderPreferences
+): ScheduleMilestone[] {
+  const { daysOverdue } = calculateMSMEInterest(
+    invoice.invoiceDate,
+    invoice.amount,
+    invoice.paymentTermsDays,
+    invoice.status,
+    asOfDate
+  );
+  return getPendingMilestones(daysOverdue, getSentMilestones(existingReminders), invoice.status, milestoneSwitches(prefs));
+}
+
 /**
  * Evaluates an individual invoice and prepares any due auto-reminders
  */
@@ -127,8 +207,9 @@ export function evaluateInvoiceForAutoReminders(
     status: string;
     user?: { name: string; businessName?: string | null; udyamNumber?: string | null };
   },
-  existingReminders: Array<{ tone: string; subject?: string | null; message?: string; status?: string | null }>,
-  asOfDate: Date = new Date()
+  existingReminders: ReminderHistory,
+  asOfDate: Date = new Date(),
+  prefs: ReminderPreferences = DEFAULT_REMINDER_PREFERENCES
 ): PlannedMilestoneReminder[] {
   const calcs = calculateMSMEInterest(
     invoice.invoiceDate,
@@ -138,9 +219,11 @@ export function evaluateInvoiceForAutoReminders(
     asOfDate
   );
 
-  const sentMilestones = getSentMilestones(existingReminders);
-  const dueMilestones = getPendingMilestones(calcs.daysOverdue, sentMilestones, invoice.status);
+  const dueMilestones = getDueMilestones(invoice, existingReminders, asOfDate, prefs);
   if (dueMilestones.length === 0) return [];
+
+  const delivery = chooseDeliveryChannel(invoice, prefs);
+  if (!delivery) return [];
 
   const supplierName = invoice.user?.businessName || invoice.user?.name || "Our MSME Enterprise";
   const udyamNumber = invoice.user?.udyamNumber || undefined;
@@ -170,15 +253,12 @@ export function evaluateInvoiceForAutoReminders(
       amount: invoice.amount,
     })}`;
 
-    const channel: NotificationChannel = invoice.buyerEmail ? "EMAIL" : "WHATSAPP";
-    const recipientContact = invoice.buyerEmail || invoice.buyerPhone || "accounts@buyer.com";
-
     planned.push({
       milestone: milestone.key,
       thresholdDays: milestone.thresholdDays,
       templateTone: milestone.templateTone,
-      recipientContact,
-      channel,
+      recipientContact: delivery.recipient,
+      channel: delivery.channel,
       subject,
       body,
     });
@@ -198,7 +278,7 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
   const invoices = await prisma.invoice.findMany({
     where: whereClause,
     include: {
-      user: true,
+      user: { include: { settings: true } },
       reminders: {
         select: { tone: true, subject: true, message: true, status: true, sentAt: true },
       },
@@ -212,9 +292,23 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
     status: "SENT" | "FAILED";
     recipient: string;
   }> = [];
+  const skipped: Array<{ invoiceId: string; invoiceNumber: string; reason: "QUIET_HOURS" | "NO_ENABLED_CHANNEL" }> = [];
 
   for (const inv of invoices) {
-    const plannedList = evaluateInvoiceForAutoReminders(inv, inv.reminders, asOfDate);
+    const prefs = toReminderPreferences(inv.user.settings);
+    if (getDueMilestones(inv, inv.reminders, asOfDate, prefs).length === 0) continue;
+
+    // Nothing is recorded while held back, so the reminder goes out on the first run after quiet hours.
+    if (isInQuietHours(prefs, asOfDate)) {
+      skipped.push({ invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, reason: "QUIET_HOURS" });
+      continue;
+    }
+    if (!chooseDeliveryChannel(inv, prefs)) {
+      skipped.push({ invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, reason: "NO_ENABLED_CHANNEL" });
+      continue;
+    }
+
+    const plannedList = evaluateInvoiceForAutoReminders(inv, inv.reminders, asOfDate, prefs);
 
     for (const planned of plannedList) {
       try {
@@ -267,5 +361,6 @@ export async function runAutoReminderScheduler(userId?: string, asOfDate: Date =
     evaluatedInvoicesCount: invoices.length,
     dispatchedRemindersCount: executionLog.length,
     executionLog,
+    skipped,
   };
 }

@@ -4,6 +4,10 @@ import { subDays } from "date-fns";
 import {
   getPendingMilestones,
   evaluateInvoiceForAutoReminders,
+  chooseDeliveryChannel,
+  isInQuietHours,
+  toReminderPreferences,
+  DEFAULT_REMINDER_PREFERENCES,
 } from "../src/lib/reminders/auto-scheduler.ts";
 
 const asOf = new Date("2024-06-01T00:00:00Z");
@@ -93,4 +97,45 @@ test("Auto Reminder Evaluation - 'Day 15' in a manual note is not mistaken for t
 test("Auto Reminder Evaluation - A FAILED delivery is retried, not treated as sent", () => {
   const history = [{ tone: "FRIENDLY", subject: "[DAY_1] Reminder", message: "...", status: "FAILED" }];
   assert.deepEqual(keys(evaluateInvoiceForAutoReminders(overdueInvoice(3), history, asOf)), ["DAY_1"]);
+});
+
+// ---- Company settings: milestone switches, channel toggles, quiet hours ----
+
+const prefs = (overrides = {}) => ({ ...DEFAULT_REMINDER_PREFERENCES, ...overrides });
+
+test("Reminder Settings - A switched-off milestone is never sent", () => {
+  assert.deepEqual(getPendingMilestones(32, ["DAY_1"], "PENDING", { DAY_30: false }), []);
+  // The latest *enabled* milestone is used instead of a disabled one
+  assert.deepEqual(keys(getPendingMilestones(65, [], "PENDING", { DAY_60: false })), ["DAY_45"]);
+});
+
+test("Reminder Settings - Evaluation respects milestone switches", () => {
+  const planned = evaluateInvoiceForAutoReminders(overdueInvoice(2), [], asOf, prefs({ sendDay1: false }));
+  assert.deepEqual(planned, []);
+});
+
+test("Reminder Settings - Channel follows Email/WhatsApp toggles", () => {
+  const both = { buyerEmail: "ap@tata.example", buyerPhone: "+919800000000" };
+  assert.deepEqual(chooseDeliveryChannel(both, prefs()), { channel: "EMAIL", recipient: "ap@tata.example" });
+  assert.deepEqual(chooseDeliveryChannel(both, prefs({ enableEmail: false })), { channel: "WHATSAPP", recipient: "+919800000000" });
+  assert.equal(chooseDeliveryChannel(both, prefs({ enableEmail: false, enableWhatsApp: false })), null);
+  assert.equal(chooseDeliveryChannel({ buyerEmail: "ap@tata.example", buyerPhone: null }, prefs({ enableEmail: false })), null);
+});
+
+test("Reminder Settings - No made-up recipient when the buyer has no contact details", () => {
+  assert.equal(chooseDeliveryChannel({ buyerEmail: null, buyerPhone: null }, prefs()), null);
+  const planned = evaluateInvoiceForAutoReminders(overdueInvoice(2, { buyerEmail: null, buyerPhone: null }), [], asOf);
+  assert.deepEqual(planned, []);
+});
+
+test("Reminder Settings - Quiet hours are checked in India time", () => {
+  // 16:00 UTC = 21:30 IST (quiet), 06:00 UTC = 11:30 IST (active)
+  assert.equal(isInQuietHours(prefs(), new Date("2024-06-01T16:00:00Z")), true);
+  assert.equal(isInQuietHours(prefs(), new Date("2024-06-01T06:00:00Z")), false);
+  assert.equal(isInQuietHours(prefs({ quietHoursStart: "00:00", quietHoursEnd: "00:00" }), new Date("2024-06-01T16:00:00Z")), false);
+});
+
+test("Reminder Settings - Missing settings row falls back to defaults", () => {
+  assert.deepEqual(toReminderPreferences(null), DEFAULT_REMINDER_PREFERENCES);
+  assert.equal(toReminderPreferences({ ...DEFAULT_REMINDER_PREFERENCES, sendDay45: false, id: "x" }).sendDay45, false);
 });

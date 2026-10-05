@@ -6,3 +6,4 @@ import "./gst-reconciler.test.mjs";
 import "./buyer-risk-aggregator.test.mjs";
 import "./multi-tenant-isolation.test.mjs";
 import "./settings-and-roles.test.mjs";
+import "./auto-reminder-runner.test.mjs";
