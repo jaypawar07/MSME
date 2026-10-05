@@ -12,7 +12,7 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | Area | State |
 | :--- | :--- |
 | Type check (`tsc --noEmit`) | ✅ clean |
-| Test suite (`npm test`) | ✅ 78 / 78 passing (was ❌ crashing before 2026-10-05) |
+| Test suite (`npm test`) | ✅ 85 / 85 passing (was ❌ crashing before 2026-10-05) |
 | Tests that exercise real `src/` code | ✅ 8 of 8 files; multi-tenant test calls real API routes on a throwaway `prisma/test.db` |
 | Production build (`next build`) | ✅ clean, no warnings |
 | Version control | ✅ git, `main` tracks github.com/jaypawar07/MSME |
@@ -37,7 +37,8 @@ Update this file at the end of every work session (see `CLAUDE.md`).
 | B15 | Medium (legal, needs CA/lawyer) | When the RBI rate changes mid-delay, the app applies today's rate to the whole period. Should earlier months use the rate in force then? `RateAuditLog` already stores history if needed. | `msme-calculator.ts` |
 | B16 | Low | Shared buyer-risk view (admin page + dashboard modal) computes all suppliers at the statutory 16.5% default; correct for comparison, but differs from a supplier's own custom rate. | `buyer-risk-aggregator.ts` |
 | ~~B17~~ | ✅ fixed 2026-10-05 | Overlapping scheduler runs sent duplicate notices (reproduced: 3 runs → 3 copies). Now one automatic notice per invoice + milestone, enforced by the database. | `auto-scheduler.ts`, `schema.prisma` |
-| B18 | Low | The cron runs once a day at 09:00 IST. A supplier whose quiet hours cover 09:00 will never get automatic reminders. Validate quiet hours in Settings or run hourly (needs Vercel Pro). | `settings/page.tsx`, `vercel.json` |
+| ~~B18~~ | ✅ fixed 2026-10-05 | Quiet hours covering the daily send time blocked all automatic reminders. Settings now rejects quiet hours overlapping 08:30–09:30 IST (Hobby cron fires anytime in the 03:00 UTC hour) and warns about previously saved ones. | `policy.ts`, `api/settings`, `settings/page.tsx` |
+| ~~B20~~ | ✅ fixed 2026-10-05 | **Regression from B1 (mine):** putting the stored role in the session exposed a legacy role `USER` (old schema default) on the demo account, which disabled Save on the Settings page. Roles are now normalized in the login session (existing sessions too) and in the settings API. | `auth.ts`, `api/settings` |
 | B19 | Low | Scheduler loads every open invoice and its reminders in one query. Fine for a pilot; paginate before thousands of suppliers. | `runAutoReminderScheduler` |
 | B11 | Low (docs) | README's interest formula (whole months compounded + simple interest on leftover days) differs from the code (fractional-month compounding). Confirm which is legally correct, then align. | `README.md`, `src/lib/msme-calculator.ts` |
 | ~~B12~~ | ✅ fixed 2026-10-05 | Scheduler used Email even when disabled, and sent to a made-up `accounts@buyer.com` when the buyer had no contact. Now skips with a reason shown in the widget. | `auto-scheduler.ts` |
@@ -110,6 +111,13 @@ Legend: ⬜ not started · 🟡 partial · ✅ done
 - **Tests:** 73 → 78 (`reminder-concurrency.test.mjs`). Mutation-checked: no uniqueness, no FAILED retry, immediate takeover all go red.
 - **Also:** user couldn't open the app. The dev server had been stopped after my checks and the pane showed a stale, oversized view. Login page verified at 375 / 800 / 1600 px, no overflow. App restarted.
 
+### 2026-10-05 (session 7): quiet hours can't block the daily send; role regression fixed
+- **Checked Vercel docs:** Hobby cron runs once a day and only to the hour (`30 3 * * *` fires 03:00–03:59 UTC = **08:30–09:29 IST**); Pro is per-minute. DEPLOYMENT.md's "09:00 IST" is exact only on Pro.
+- **Feature:** `AUTO_SEND_WINDOW_IST` (08:30–09:30) in `policy.ts`. Settings API rejects quiet hours that overlap it (checks the window that will actually be saved), GET returns `quietHoursWarning` for older settings, and the Settings page shows a hint and the warning. A test keeps the window in sync with `vercel.json`.
+- **Found while verifying in the browser:** Save was disabled for the demo account. Root cause: my B1 change put the stored role in the session, and the demo DB row has a legacy `USER` role. Fixed with `normalizeRole` in the auth callbacks and settings API; reproduced by tests first.
+- **Tests:** 78 → 85. **Verified in browser:** quiet hours 21:00–09:00 → save refused with the explanation shown, nothing stored.
+- **My mistake:** ran `next build` while the dev server was running. It overwrote `.next` and broke the running app (500s, lost login state). Restarted the dev server after clearing `.next`.
+
 ---
 
 ## 🧠 Lessons learned (mistakes → rules)
@@ -138,3 +146,6 @@ Each time a mistake is found, add a line here so it isn't repeated.
 20. **Never branch a test on the wall clock.** Pass the time in, so every run checks the same thing. *(2026-10-05)*
 21. **Prevent duplicates in the database, not just in code.** A "check history, then send" step can't stop two overlapping runs; a unique constraint plus claim-before-send can. *(2026-10-05)*
 22. **When the user is using the running app, say before stopping it**, and restart it when done. *(2026-10-05)*
+23. **Exposing real data can surface old bad data.** When a field starts flowing somewhere new (role → session), check what values actually exist in databases, not just what the schema says now. *(2026-10-05)*
+24. **Never run `next build` while `next dev` is running.** They share `.next`. Stop the dev server first, or build in CI. *(2026-10-05)*
+25. **Verify UI changes by actually using them.** Unit tests passed while the Save button was disabled for the demo user. *(2026-10-05)*
